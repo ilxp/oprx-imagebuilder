@@ -99,5 +99,5 @@ https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/UnblockNeteaseMusic-Go-0.2.13
 https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/luci-app-unblockneteasemusic-27.179.38486~d85a080.apk
 
 # ---- Podman 及其语言包 ----
-Zerogiven-OpenWRT-Packages|luci-app-podman-*_all_25.12.apk
-Zerogiven-OpenWRT-Packages|luci-i18n-podman-*-all_25.12.apk
+Zerogiven-OpenWRT-Packages/luci-app-podman|luci-app-podman-*_all_25.12.apk
+Zerogiven-OpenWRT-Packages/luci-app-podman|luci-i18n-podman-*-all_25.12.apk
