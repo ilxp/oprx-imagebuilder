@@ -134,10 +134,6 @@ load_config() {
   ARCH="${ARCH_OVERRIDE:-$DEFAULT_TARGET}"
 
   # ---- 版本号优先级：override > config VERSION > DEFAULT_VERSION ----
-  # override 支持：
-  #   一段：<version>                      如 25.12.6
-  #   两段：<distro>/<version>             如 openwrt/25.12.6、openwrt/snapshot
-  #   三段：<distro>/<channel>/<version>   如 openwrt/snapshot/26.11.6
   if [[ -n "${VERSION_OVERRIDE:-}" ]]; then
     local IFS_OLD="$IFS"
     local -a parts
@@ -161,7 +157,7 @@ load_config() {
       [[ -n "$ov_version" ]] || { log_error "版本号为空: $VERSION_OVERRIDE"; exit 1; }
       [[ "$ov_distro" != "$IB_DISTRO" ]] && { log_info "发行版: $ov_distro (VERSION_OVERRIDE 覆盖 $IB_DISTRO)"; IB_DISTRO="$ov_distro"; }
       VERSION="$ov_version"
-      IB_CHANNEL=""   # 让 ib_release_path 从 VERSION 推导
+      IB_CHANNEL=""   # 让下面的 snapshot 判断决定，或从 VERSION 推导
       log_info "版本: $VERSION (VERSION_OVERRIDE)"
 
     elif [[ "$nparts" -eq 1 ]]; then
@@ -170,9 +166,6 @@ load_config() {
 
     else
       log_error "VERSION_OVERRIDE 格式错误: $VERSION_OVERRIDE"
-      log_error "  一段：25.12.6"
-      log_error "  两段：openwrt/25.12.6 或 openwrt/snapshot"
-      log_error "  三段：openwrt/snapshot/26.11.6"
       exit 1
     fi
 
@@ -184,28 +177,30 @@ load_config() {
   fi
 
   # ---- snapshots 渠道下，VERSION 为空 / snapshot 占位 → 短日期 ----
-  local is_snapshot=0
   local v_lower
   v_lower=$(printf '%s' "${VERSION:-}" | tr '[:upper:]' '[:lower:]')
 
+  # 判定是否开发快照：
+  #   ① IB_CHANNEL 显式为 snapshots
+  #   ② VERSION 整串是 snapshot（任意大小写）或空
   if [[ "${IB_CHANNEL:-}" == "snapshots" || "${IB_CHANNEL:-}" == "snapshot" ]]; then
-    is_snapshot=1
-  elif [[ -z "$v_lower" || "$v_lower" == "snapshot" ]]; then
-    is_snapshot=1
-  fi
-
-  if [[ "$is_snapshot" -eq 1 ]]; then
+    # ① 已显式指定 snapshots，但 VERSION 还是占位符 / 空 → 换成短日期
     if [[ -z "$v_lower" || "$v_lower" == "snapshot" ]]; then
-      [[ -z "${IB_CHANNEL:-}" ]] && IB_CHANNEL="snapshots"
       VERSION="$(ib_short_date)"
       log_info "开发快照，VERSION 自动设为短日期: $VERSION"
     fi
+    IB_CHANNEL="snapshots"    # 归一化
+  elif [[ -z "$v_lower" || "$v_lower" == "snapshot" ]]; then
+    # ② 没显式指定，但 VERSION 是 snapshot 占位 → 强制 snapshots + 短日期
+    IB_CHANNEL="snapshots"
+    VERSION="$(ib_short_date)"
+    log_info "开发快照，VERSION 自动设为短日期: $VERSION"
   fi
 
   log_info "发行版: $IB_DISTRO"
   [[ -n "${IB_CHANNEL:-}" ]] && log_info "渠道: $IB_CHANNEL (显式)"
   log_info "渠道路径: $(ib_release_path)"
-
+  
   # ---- 加载 Target 设备配置 ----
   TARGET_CONF="$ROOT/config/targets/${ARCH}.conf"
   [[ -f "$TARGET_CONF" ]] || { log_error "找不到 $TARGET_CONF"; exit 1; }
