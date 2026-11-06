@@ -82,9 +82,9 @@ ilxp/controlplus-openwrt|*Controlplus*${ARCH_PACKAGES}.tar.gz
 ilxp/admask-openwrt|AdMask-${ARCH_PACKAGES}-openwrt-*.tar.gz
 
 # ---- iqos ----
-ilxp/iqos-openwrt|iqos-*.apk
-ilxp/iqos-openwrt|luci-app-iqos-*.apk
-ilxp/iqos-openwrt|luci-i18n-iqos-zh-cn-*.apk
+#ilxp/iqos-openwrt|iqos-*.apk
+#ilxp/iqos-openwrt|luci-app-iqos-*.apk
+#ilxp/iqos-openwrt|luci-i18n-iqos-zh-cn-*.apk
 
 # ---- ONUP (在线升级) ----
 ilxp/onup-openwrt|ONUP-${ARCH_PACKAGES}-openwrt-*.tar.gz

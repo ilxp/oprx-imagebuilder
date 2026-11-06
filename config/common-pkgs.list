@@ -147,7 +147,6 @@ kmod-crypto-manager
 kmod-crypto-md4
 kmod-crypto-md5
 kmod-crypto-michael-mic
-kmod-crypto-misc
 kmod-crypto-null
 kmod-crypto-pcbc
 kmod-crypto-rmd160
