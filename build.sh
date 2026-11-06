@@ -31,15 +31,29 @@ _expand_vars() {
 }
 
 # ========== 由 VERSION 推导 RELEASE_PATH ==========
-# "SNAPSHOT" / "snapshot" / 空 → snapshots
-# 其余 → releases/<VERSION>
+# 大小写不敏感：
+#   "" / "SNAPSHOT" / "snapshot"  → snapshots
+#   "25.12-SNAPSHOT" / "25.12-snapshot" → releases/25.12-SNAPSHOT
+#   "25.12.6"                    → releases/25.12.6
+# 用 tr 而非 ${v,,}：兼容 macOS 自带 bash 3.2
 ib_release_path() {
   local v="${1:-$VERSION}"
-  if [[ -z "$v" || "$v" == "SNAPSHOT" || "$v" == "snapshot" ]]; then
+  local lower
+  lower=$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')
+
+  # 整串 snapshot → 开发快照
+  if [[ -z "$v" || "$lower" == "snapshot" ]]; then
     printf 'snapshots'
-  else
-    printf 'releases/%s' "$v"
+    return
   fi
+
+  # x.y-snapshot（任意大小写）→ 统一成 x.y-SNAPSHOT
+  if [[ "$lower" == *-snapshot ]]; then
+    printf 'releases/%s-SNAPSHOT' "${v%-*}"
+    return
+  fi
+
+  printf 'releases/%s' "$v"
 }
 
 ib_url() {
