@@ -18,7 +18,7 @@
 
 # ---- Honk  ----  
 QiuSimons/luci-app-honk|honk-*-${ARCH_PACKAGES}-openwrt-*.apk
-QiuSimons/luci-app-honk|luci-app-honk-*.apk  #格式错误编译不成功，用kenzok8的
+QiuSimons/luci-app-honk|luci-app-honk-*.apk
 QiuSimons/luci-app-honk|luci-i18n-honk-zh-cn-*.apk
 
 # ---- Honk-kenzok8 ----
