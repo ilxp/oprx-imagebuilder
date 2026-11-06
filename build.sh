@@ -30,90 +30,109 @@ _expand_vars() {
   printf '%s' "$s"
 }
 
+# ========== 从 base URL 提取版本（供 REPOS / 产物命名 / Release tag 用）==========
+ib_version_from_base_url() {
+  local base="${IMAGEBUILDER_BASE_URL%/}"
+  if [[ "$base" =~ /snapshots/targets$ ]]; then
+    printf 'SNAPSHOT'
+  elif [[ "$base" =~ /releases/([^/]+)/targets$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  else
+    printf ''
+  fi
+}
+
+# ========== 展开 ImageBuilder 下载 URL ==========
+# 依赖变量（由 load_config 先加载）：
+#   IMAGEBUILDER_BASE_URL IB_PRODUCT IB_URL_OVERRIDE VERSION
+#   TARGET SUBTARGET IB_ARCH_TAG IB_HOST_TAG
+ib_url() {
+  # ---- escape hatch：自建源 ----
+  if [[ -n "${IB_URL_OVERRIDE:-}" ]]; then
+    local url="$IB_URL_OVERRIDE"
+    url="${url//__IB_ARCH_TAG__/$IB_ARCH_TAG}"
+    url="${url//__IB_HOST_TAG__/$IB_HOST_TAG}"
+    url="${url//__VERSION__/$VERSION}"
+    url="${url//__TARGET__/$TARGET}"
+    url="${url//__SUBTARGET__/$SUBTARGET}"
+    printf '%s' "$url"
+    return
+  fi
+
+  local base="${IMAGEBUILDER_BASE_URL%/}"
+
+  # ---- product 推导 ----
+  local product="${IB_PRODUCT:-}"
+  if [[ -z "$product" ]]; then
+    if [[ "$base" == *immortalwrt* ]]; then
+      product="immortalwrt"
+    elif [[ "$base" == *openwrt* ]]; then
+      product="openwrt"
+    else
+      log_error "无法从 IMAGEBUILDER_BASE_URL 推断产品名（openwrt/immortalwrt）："
+      log_error "  $base"
+      log_error "  请设置 IB_PRODUCT=\"openwrt\" 或 \"immortalwrt\""
+      exit 1
+    fi
+  fi
+
+  # ---- channel / version 推导 + 拼 URL ----
+  local out
+  if [[ "$base" =~ /snapshots/targets$ ]]; then
+    out="${base}/${TARGET}/${SUBTARGET}/${product}-imagebuilder-${IB_ARCH_TAG}.${IB_HOST_TAG}.tar.zst"
+  elif [[ "$base" =~ /releases/([^/]+)/targets$ ]]; then
+    local ver="${BASH_REMATCH[1]}"
+    out="${base}/${TARGET}/${SUBTARGET}/${product}-imagebuilder-${ver}-${IB_ARCH_TAG}.${IB_HOST_TAG}.tar.zst"
+  else
+    log_error "IMAGEBUILDER_BASE_URL 格式不对，必须以 /releases/<版本>/targets 或 /snapshots/targets 结尾："
+    log_error "  $base"
+    exit 1
+  fi
+  printf '%s' "$out"
+}
+
 # ========== 1. 加载配置 ==========
 load_config() {
   . "$ROOT/config/build.conf"
   ARCH="${ARCH_OVERRIDE:-$DEFAULT_TARGET}"
-  
-  # 接收 workflow 传进来的覆盖参数
-  FW_TYPE="${FW_TYPE_OVERRIDE:-$FW_TYPE}"
-  VERSION_BRANCH="${VERSION_BRANCH_OVERRIDE:-$VERSION_BRANCH}"
 
-  # 版本号解析（优先级：强制覆盖 > 自动拉取 > 配置文件 > 兜底）
+  # ---- 版本号：override > config VERSION > 从 base URL 提取 > 兜底 ----
   if [[ -n "${VERSION_OVERRIDE:-}" ]]; then
-    # 1. 优先使用 workflow 传入的强制覆盖参数
     VERSION="$VERSION_OVERRIDE"
-    log_info "使用强制指定版本: $VERSION"
-  elif [[ -z "${VERSION:-}" ]]; then
-    # 2. 自动去拉取
-    if [[ "$FW_TYPE" == "custom" ]]; then
-      # Custom 模式没有公开 API，直接使用兜底版本
-      VERSION="${DEFAULT_VERSION:-25.12.6}"
-      log_info "Custom 模式，使用默认版本: $VERSION"
-      
-    elif [[ "$FW_TYPE" == "immortalwrt" ]]; then
-      log_info "正在从目录获取 ImmortalWrt 版本 (分支: ${VERSION_BRANCH:-stable})..."
-      
-      # 抓取 releases 目录，提取纯数字版本号并降序排序
-      local all_vers
-      all_vers=$(curl -fsSL --connect-timeout 10 "https://downloads.immortalwrt.org/releases/" 2>/dev/null \
-        | grep -oE 'href="[0-9]+\.[0-9]+\.[0-9]+/"' \
-        | sed 's/href="//;s/\/"//' \
-        | grep -v 'SNAPSHOT' \
-        | sort -V -r)
-
-      local latest_ver=""
-      if [[ "${VERSION_BRANCH:-stable}" == "oldstable" ]]; then
-        # 取第二新的版本（Old Stable）
-        latest_ver=$(echo "$all_vers" | sed -n '2p')
-      else
-        # 取最新的版本（Stable）
-        latest_ver=$(echo "$all_vers" | sed -n '1p')
-      fi
-
-      if [[ -n "$latest_ver" ]]; then
-        VERSION="$latest_ver"
-        log_ok "自动获取到版本: $VERSION"
-      else
-        VERSION="${DEFAULT_VERSION:-25.12.6}"
-        log_warn "网络获取失败，回退至默认版本: $VERSION"
-      fi
-
-    else
-      # 3. OpenWrt 走原本的 JSON API
-      log_info "正在从官方获取 OpenWrt 版本 (分支: ${VERSION_BRANCH:-stable})..."
-      
-      local json_data
-      json_data=$(curl -fsSL --connect-timeout 10 "https://downloads.openwrt.org/.versions.json" 2>/dev/null || true)
-      
-      local latest_ver=""
-      if [[ -n "$json_data" ]]; then
-        if [[ "${VERSION_BRANCH:-stable}" == "oldstable" ]]; then
-          latest_ver=$(echo "$json_data" | jq -r '.oldstable_version // empty')
-        else
-          latest_ver=$(echo "$json_data" | jq -r '.stable_version // empty')
-        fi
-      fi
-
-      # 正则校验确保是纯数字版本号
-      if [[ -n "$latest_ver" && "$latest_ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-        VERSION="$latest_ver"
-        log_ok "自动获取到版本: $VERSION"
-      else
-        VERSION="${DEFAULT_VERSION:-25.12.6}"
-        log_warn "网络获取失败，回退至默认版本: $VERSION"
+    log_info "版本: $VERSION (VERSION_OVERRIDE)"
+    # 若没走 IB_URL_OVERRIDE，检查 VERSION 与 base URL 是否一致，避免"改了变量但下载的没变"
+    if [[ -z "${IB_URL_OVERRIDE:-}" ]]; then
+      local base_ver
+      base_ver="$(ib_version_from_base_url)"
+      if [[ -n "$base_ver" && "$base_ver" != "$VERSION" ]]; then
+        log_warn "VERSION_OVERRIDE=$VERSION 与 base URL 里的版本 $base_ver 不一致"
+        log_warn "  下载的仍是 base URL 的 $base_ver；如要真正换版本，请改 IMAGEBUILDER_BASE_URL"
       fi
     fi
+  elif [[ -n "${VERSION:-}" ]]; then
+    log_info "版本: $VERSION (config)"
+  elif [[ -n "${IB_URL_OVERRIDE:-}" ]]; then
+    log_error "IB_URL_OVERRIDE 已设置，但 VERSION 为空"
+    log_error "  请在 build.conf 里设置 VERSION，或在 workflow 传 VERSION_OVERRIDE"
+    exit 1
   else
-    # 4. config 里写了具体版本，直接使用
-    log_info "使用 config 配置版本: $VERSION"
+    VERSION="$(ib_version_from_base_url)"
+    if [[ -n "$VERSION" ]]; then
+      log_ok "版本从 IMAGEBUILDER_BASE_URL 提取: $VERSION"
+    else
+      VERSION="$DEFAULT_VERSION"
+      log_warn "base URL 提取失败，回退 DEFAULT_VERSION: $VERSION"
+    fi
   fi
 
-  # 加载 Target 设备配置
+  # ---- 加载 Target 设备配置 ----
   TARGET_CONF="$ROOT/config/targets/${ARCH}.conf"
   [[ -f "$TARGET_CONF" ]] || { log_error "找不到 $TARGET_CONF"; exit 1; }
   . "$TARGET_CONF"
   [[ "${CONF_TARGET:-}" == "$ARCH" ]] || { log_error "$TARGET_CONF 声明与 $ARCH 不符"; exit 1; }
+
+  # ---- 调试：打印最终 IB 地址（此时 TARGET/SUBTARGET/IB_*_TAG 已就绪）----
+  log_info "IB URL: $(ib_url)"
 
   # ---- 自建包清单 ----
   CUSTOM_ASSETS="${CUSTOM_ASSETS:-}"
@@ -148,37 +167,23 @@ prepare_dirs() {
 
 # ========== 3. 下载 ImageBuilder（带 sha256 校验） ==========
 download_imagebuilder() {
-  local archive="" base=""
-  
-  # ★ 动态拼接下载链接和包名
-  case "$FW_TYPE" in
-    custom)
-      # 注意：此处用 eval 才能安全解析配置里单引号的 ${VERSION}
-      base=$(eval echo "$CUSTOM_IB_URL")
-      # 默认你自建的 IB 也是用 immortalwrt 命名规则
-      archive="immortalwrt-imagebuilder-${VERSION}-${IB_ARCH_TAG}.${IB_HOST_TAG}.tar.zst"
-      ;;
-    immortalwrt)
-      base="https://downloads.immortalwrt.org/releases/${VERSION}/targets/${TARGET}/${SUBTARGET}"
-      archive="immortalwrt-imagebuilder-${VERSION}-${IB_ARCH_TAG}.${IB_HOST_TAG}.tar.zst"
-      ;;
-    *)
-      base="https://downloads.openwrt.org/releases/${VERSION}/targets/${TARGET}/${SUBTARGET}"
-      archive="openwrt-imagebuilder-${VERSION}-${IB_ARCH_TAG}.${IB_HOST_TAG}.tar.zst"
-      ;;
-  esac
-
   if [[ -f "$IB_DIR/Makefile" ]]; then
     log_ok "ImageBuilder 已存在，跳过下载"
     return
   fi
 
-  log_info "下载 $archive (从 $FW_TYPE)..."
-  wget -q --timeout=60 --tries=3 "$base/$archive" -O "$WORK_DIR/$archive" \
-    || { log_error "下载失败: $base/$archive"; exit 1; }
+  local url archive base
+  url="$(ib_url)"
+  archive="${url##*/}"
+  base="${url%/*}"
+
+  log_info "下载 $archive"
+  log_info "  从 $base"
+  wget -q --timeout=60 --tries=3 "$url" -O "$WORK_DIR/$archive" \
+    || { log_error "下载失败: $url"; exit 1; }
 
   log_info "sha256 校验..."
-  if wget -q --timeout=30 "$base/sha256sums" -O "$WORK_DIR/sha256sums"; then
+  if wget -q --timeout=30 "$base/sha256sums" -O "$WORK_DIR/sha256sums" 2>/dev/null; then
     local exp act
     exp=$(awk -v f="$archive" '$2==f || $2=="*"f {print $1}' "$WORK_DIR/sha256sums")
     act=$(sha256sum "$WORK_DIR/$archive" | cut -d' ' -f1)
@@ -190,7 +195,7 @@ download_imagebuilder() {
     fi
     rm -f "$WORK_DIR/sha256sums"
   else
-    # 自建源可能没有 sha256sums，这里降级为警告
+    # 自建源可能没有 sha256sums，降级为警告
     log_warn "无法下载 sha256sums，跳过校验"
   fi
 
