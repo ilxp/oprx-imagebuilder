@@ -682,9 +682,16 @@ make_image_with_self_heal() {
     echo "$missing" | sed 's/^/    /'
     skipped+=" $(echo "$missing" | xargs)"
 
-    for pkg in $missing; do
-      PACKAGES=$(echo " $PACKAGES " | sed -E "s| ${pkg}(=[0-9][^ ]*)? | |g" | xargs)
-    done
+	# 在 for pkg in $missing 循环里
+	for pkg in $missing; do
+		if ! echo " $PACKAGES " | grep -qE " ${pkg}(=[0-9][^ ]*)? "; then
+			log_error "缺失包 $pkg 不在 PACKAGES 里（是依赖），无法通过剔除自愈"
+			log_error "  请检查 build.log 里 'cannot find dependency $pkg for XXX'，找到依赖它的包"
+			log_error "  然后从 common-pkgs.list / custom-assets.txt / PACKAGES_ARCH_EXTRA 里移除那个包"
+			exit 1
+		fi
+		PACKAGES=$(echo " $PACKAGES " | sed -E "s| ${pkg}(=[0-9][^ ]*)? | |g" | xargs)
+	done
   done
 
   if [[ -n "$skipped" ]]; then
