@@ -8,7 +8,7 @@ on:
         type: string
         default: "X86"
       version:
-        description: "OpenWrt 版本（留空 = build.conf 的 VERSION，即自动获取最新版本）"
+        description: "OpenWrt 版本（留空 = build.conf 的 VERSION）"
         type: string
         default: ""
 
