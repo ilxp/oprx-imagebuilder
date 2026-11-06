@@ -279,12 +279,14 @@ prepare_repos() {
   mkdir -p "$overlay_repo_dir" "$overlay_key_dir"
 
   # ImageBuilder 25.12 的 repositories 是 apk v3 纯 URL 格式
-  # （每行一个 https://.../packages.adb），不是 opkg 的 src/gz 格式。
   local orig_count=0
   [[ -f "$IB_DIR/repositories" ]] && orig_count=$(grep -cE '^https?://' "$IB_DIR/repositories" || true)
   log_info "ImageBuilder 内置 ${orig_count} 个官方仓库（保留）"
 
   local count=0
+  local release_path
+  release_path="$(ib_release_path)"          # 只算一次，循环里复用
+
   while IFS='|' read -r name url key_url enabled; do
     [[ -z "$name" || "$name" == \#* ]] && continue
     [[ "$enabled" == "true" ]] || continue
@@ -295,7 +297,9 @@ prepare_repos() {
       continue
     fi
 
-    url="${url//__VERSION__/$VERSION}"
+    # ---- 占位符展开 ----
+    url="${url//__RELEASE_PATH__/$release_path}"
+    url="${url//__VERSION__/$VERSION}"                # 保留（第三方源用）
     url="${url//__ARCH__/$ARCH_PACKAGES}"
     url="${url//__TARGET__/$TARGET}"
     url="${url//__SUBTARGET__/$SUBTARGET}"
