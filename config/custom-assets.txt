@@ -95,8 +95,8 @@ ilxp/onup-openwrt|ONUP-${ARCH_PACKAGES}-openwrt-*.tar.gz
 #VIKINGYFY/packages|sing-box-*.apk
 
 # ---- UnblockNeteaseMusic-Go ----
-https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/UnblockNeteaseMusic-Go-0.2.13-r1.apk
-https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/luci-app-unblockneteasemusic-27.179.38486~d85a080.apk
+#https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/UnblockNeteaseMusic-Go-0.2.13-r1.apk
+#https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/luci-app-unblockneteasemusic-27.179.38486~d85a080.apk
 
 # ---- Podman 及其语言包 ----
 Zerogiven-OpenWRT-Packages/luci-app-podman|luci-app-podman-*.apk
