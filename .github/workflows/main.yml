@@ -10,7 +10,7 @@ on:
       version:
         description: "发行版/版本号，如 openwrt/25.12.6、immortalwrt/25.12-SNAPSHOT、openwrt/SNAPSHOT"
         type: string
-        default: "openwrt/25.12.6"
+        default: "openwrt/SNAPSHOT"
 
 permissions:
   contents: write
