@@ -611,7 +611,7 @@ make_image_with_self_heal() {
   local round=0
   local max=5
   local skipped=""
-  local protected='^(base-files|libc|busybox|uci|procd|netifd|fstools|firewall4|dropbear|libgcc|kernel|kmod-.*)$'
+  local protected='^(base-files|libc|busybox|uci|procd|netifd|fstools|firewall4|dropbear|libgcc|kernel)$'
 
   while :; do
     round=$((round + 1))
