@@ -8,9 +8,9 @@ on:
         type: string
         default: "X86"
       version:
-        description: "发行版/版本号，如 openwrt/25.12.6、immortalwrt/25.12-SNAPSHOT、openwrt/SNAPSHOT"
+        description: "版本。openwrt/25.12.6；immortalwrt/25.12-SNAPSHOT；openwrt/snapshot；openwrt/snapshot/26.11.6（显式指定日期）"
         type: string
-        default: "openwrt/SNAPSHOT"
+        default: "openwrt/snapshot"
 
 permissions:
   contents: write

@@ -30,6 +30,16 @@ _expand_vars() {
   printf '%s' "$s"
 }
 
+# 生成短日期 YY.M.D（去前导 0），如 26.11.6
+# 参数：YYYYMMDD（可选，默认今天）
+ib_short_date() {
+  local d="${1:-$(TZ=Asia/Shanghai date +%Y%m%d)}"
+  local yy="${d:2:2}"
+  local mm=$((10#${d:4:2}))   # 10# 防止 08/09 被当八进制
+  local dd=$((10#${d:6:2}))
+  printf '%s.%d.%d' "$yy" "$mm" "$dd"
+}
+
 # ========== 由 VERSION 推导 RELEASE_PATH ==========
 # 大小写不敏感：
 #   "" / "SNAPSHOT" / "snapshot"  → snapshots
@@ -124,36 +134,48 @@ load_config() {
   ARCH="${ARCH_OVERRIDE:-$DEFAULT_TARGET}"
 
   # ---- 版本号优先级：override > config VERSION > DEFAULT_VERSION ----
-  # override 支持 <distro>/<version> 格式：
-  #   openwrt/25.12.6          → IB_DISTRO=openwrt, VERSION=25.12.6
-  #   immortalwrt/25.12.2      → IB_DISTRO=immortalwrt, VERSION=25.12.2
-  #   immortalwrt/25.12-SNAPSHOT → IB_DISTRO=immortalwrt, VERSION=25.12-SNAPSHOT
-  #   openwrt/SNAPSHOT         → IB_DISTRO=openwrt, VERSION=SNAPSHOT
-  #   25.12.6（无 /）          → 只覆盖 VERSION，IB_DISTRO 保持 build.conf
+  # override 支持：
+  #   一段：<version>                      如 25.12.6
+  #   两段：<distro>/<version>             如 openwrt/25.12.6、openwrt/snapshot
+  #   三段：<distro>/<channel>/<version>   如 openwrt/snapshot/26.11.6
   if [[ -n "${VERSION_OVERRIDE:-}" ]]; then
-    if [[ "$VERSION_OVERRIDE" == */* ]]; then
-      local ov_distro="${VERSION_OVERRIDE%%/*}"
-      local ov_version="${VERSION_OVERRIDE#*/}"
+    local IFS_OLD="$IFS"
+    local -a parts
+    IFS='/' read -ra parts <<< "$VERSION_OVERRIDE"
+    IFS="$IFS_OLD"
+    local nparts="${#parts[@]}"
 
-      if [[ ! "$ov_distro" =~ ^[a-z][a-z0-9_-]*$ ]]; then
-        log_error "VERSION_OVERRIDE 的发行版名不合法: $ov_distro"
-        log_error "  格式应为 <distro>/<version>，如 openwrt/25.12.6"
-        exit 1
-      fi
-      if [[ -z "$ov_version" ]]; then
-        log_error "VERSION_OVERRIDE 解析后版本为空: $VERSION_OVERRIDE"
-        exit 1
-      fi
-
-      if [[ "$ov_distro" != "$IB_DISTRO" ]]; then
-        log_info "发行版: $ov_distro (VERSION_OVERRIDE 覆盖 build.conf 的 $IB_DISTRO)"
-        IB_DISTRO="$ov_distro"
-      fi
+    if [[ "$nparts" -eq 3 ]]; then
+      local ov_distro="${parts[0]}" ov_channel="${parts[1]}" ov_version="${parts[2]}"
+      [[ "$ov_distro" =~ ^[a-z][a-z0-9_-]*$ ]] || { log_error "发行版名不合法: $ov_distro"; exit 1; }
+      [[ "$ov_channel" == "releases" || "$ov_channel" == "snapshots" ]] || { log_error "渠道名不合法: $ov_channel"; exit 1; }
+      [[ -n "$ov_version" ]] || { log_error "版本号为空: $VERSION_OVERRIDE"; exit 1; }
+      [[ "$ov_distro" != "$IB_DISTRO" ]] && { log_info "发行版: $ov_distro (VERSION_OVERRIDE 覆盖 $IB_DISTRO)"; IB_DISTRO="$ov_distro"; }
+      IB_CHANNEL="$ov_channel"
       VERSION="$ov_version"
-    else
+      log_info "版本: $VERSION，渠道: $IB_CHANNEL (VERSION_OVERRIDE)"
+
+    elif [[ "$nparts" -eq 2 ]]; then
+      local ov_distro="${parts[0]}" ov_version="${parts[1]}"
+      [[ "$ov_distro" =~ ^[a-z][a-z0-9_-]*$ ]] || { log_error "发行版名不合法: $ov_distro"; exit 1; }
+      [[ -n "$ov_version" ]] || { log_error "版本号为空: $VERSION_OVERRIDE"; exit 1; }
+      [[ "$ov_distro" != "$IB_DISTRO" ]] && { log_info "发行版: $ov_distro (VERSION_OVERRIDE 覆盖 $IB_DISTRO)"; IB_DISTRO="$ov_distro"; }
+      VERSION="$ov_version"
+      IB_CHANNEL=""   # 让 ib_release_path 从 VERSION 推导
+      log_info "版本: $VERSION (VERSION_OVERRIDE)"
+
+    elif [[ "$nparts" -eq 1 ]]; then
       VERSION="$VERSION_OVERRIDE"
+      log_info "版本: $VERSION (VERSION_OVERRIDE，distro/channel 用 build.conf)"
+
+    else
+      log_error "VERSION_OVERRIDE 格式错误: $VERSION_OVERRIDE"
+      log_error "  一段：25.12.6"
+      log_error "  两段：openwrt/25.12.6 或 openwrt/snapshot"
+      log_error "  三段：openwrt/snapshot/26.11.6"
+      exit 1
     fi
-    log_info "版本: $VERSION (VERSION_OVERRIDE / GitHub input)"
+
   elif [[ -n "${VERSION:-}" ]]; then
     log_info "版本: $VERSION (config VERSION)"
   else
@@ -161,8 +183,28 @@ load_config() {
     log_warn "VERSION 为空，回退 DEFAULT_VERSION: $VERSION"
   fi
 
+  # ---- snapshots 渠道下，VERSION 为空 / snapshot 占位 → 短日期 ----
+  local is_snapshot=0
+  local v_lower
+  v_lower=$(printf '%s' "${VERSION:-}" | tr '[:upper:]' '[:lower:]')
+
+  if [[ "${IB_CHANNEL:-}" == "snapshots" || "${IB_CHANNEL:-}" == "snapshot" ]]; then
+    is_snapshot=1
+  elif [[ -z "$v_lower" || "$v_lower" == "snapshot" ]]; then
+    is_snapshot=1
+  fi
+
+  if [[ "$is_snapshot" -eq 1 ]]; then
+    if [[ -z "$v_lower" || "$v_lower" == "snapshot" ]]; then
+      [[ -z "${IB_CHANNEL:-}" ]] && IB_CHANNEL="snapshots"
+      VERSION="$(ib_short_date)"
+      log_info "开发快照，VERSION 自动设为短日期: $VERSION"
+    fi
+  fi
+
   log_info "发行版: $IB_DISTRO"
-  log_info "渠道: $(ib_release_path)"
+  [[ -n "${IB_CHANNEL:-}" ]] && log_info "渠道: $IB_CHANNEL (显式)"
+  log_info "渠道路径: $(ib_release_path)"
 
   # ---- 加载 Target 设备配置 ----
   TARGET_CONF="$ROOT/config/targets/${ARCH}.conf"
