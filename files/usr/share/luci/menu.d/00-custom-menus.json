@@ -1,0 +1,16 @@
+{
+	"admin/nas": {
+		"title": "NAS",
+		"order": 65,
+		"action": {
+			"type": "firstchild"
+		}
+	},
+	"admin/vpn": {
+		"title": "VPN",
+		"order": 60,
+		"action": {
+			"type": "firstchild"
+		}
+	}
+}

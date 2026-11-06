@@ -1,0 +1,2 @@
+# 每月 1 号清空 /tmp 下的日志和文本（保留文件本身）
+0 0 1 * * find /tmp -type f \( -name "*.log" -o -name "*.txt" \) -exec sh -c 'rm -f {} && touch {}' \;

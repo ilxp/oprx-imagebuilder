@@ -1,0 +1,103 @@
+# ==============================================================================
+# 自建包清单 —— 从 GitHub Release 或者直连模式 抓 .apk 装进镜像
+# ==============================================================================
+#
+# 格式：owner/repo|资产名glob[|!排除glob1|!排除glob2]
+#   - ${VAR} 由 build.sh 在运行时展开（当前支持：ARCH_PACKAGES / VERSION /
+#     TARGET / SUBTARGET / SERIES）
+#   - 排除字段 !glob 同时作用于资产名和 tar.gz 内的 .apk 文件名
+#   - 脚本会自动校验：ADB v3 格式 + 目标架构（noarch 或 = ARCH_PACKAGES）
+#   - 拿到的包会以 name=version 形式追加到 PACKAGES
+#   - 以 # 开头的行是注释，空行忽略
+#
+# 启用某个包：删掉对应行开头的 #
+# ==============================================================================
+# ---- Autocore (系统信息监控) ----
+#ilxp/oprx-imagebuilder|autocore-*.apk
+https://github.com/ilxp/oprx-imagebuilder/releases/download/autocore/autocore-x86-1.0.1-r1.apk
+
+# ---- Honk  ----  
+QiuSimons/luci-app-honk|honk-*-${ARCH_PACKAGES}-openwrt-*.apk
+#QiuSimons/luci-app-honk|luci-app-honk-*.apk  #格式错误编译不成功，用kenzok8的
+QiuSimons/luci-app-honk|luci-i18n-honk-zh-cn-*.apk
+
+# ---- Honk-kenzok8 ----
+https://down.dllkids.xyz/openwrt-feed/honk/25.12/x86_64/luci-app-honk-2026.11.05-r1.apk
+#https://down.dllkids.xyz/openwrt-feed/honk/25.12/x86_64/honk-2026.11.05-r1.apk
+
+# ---- HomeProxy (sing-box 代理插件) ----
+#kenzok8/small|luci-app-homeproxy-*.apk
+#kenzok8/small|luci-i18n-homeproxy-zh-cn-*.apk
+#kenzok8/small|sing-box-*.apk
+
+# ---- Clashoo (sing-box +mihoo 代理插件) ----
+#kenzok8/openwrt-clashoo|luci-app-clashoo-*-${ARCH_PACKAGES}.apk
+#kenzok8/openwrt-clashoo|luci-i18n-clashoo-zh-cn-*-${ARCH_PACKAGES}.apk
+#kenzok8/openwrt-clashoo|clashoo-*-${ARCH_PACKAGES}.apk
+
+# ---- Daed 生态 ----
+#kenzok8/openwrt-daede|luci-app-daede-*-${ARCH_PACKAGES}.apk
+#kenzok8/openwrt-daede|dae-*-${ARCH_PACKAGES}.apk
+#kenzok8/openwrt-daede|daed-*-${ARCH_PACKAGES}.apk
+
+# ---- mihomo（Clash.Meta 内核 + LuCI） ----
+# hahaher123/openwrt-mihomo|luci-app-mihomo-*.apk
+# hahaher123/openwrt-mihomo|mihomo-*_${ARCH_PACKAGES}.apk
+
+# ---- oxidns（DNS 分流） ----
+# hahaher123/openwrt-oxidns|oxidns-*_${ARCH_PACKAGES}.apk
+# hahaher123/luci-app-oxidns|luci-app-oxidns-*.apk
+# hahaher123/luci-app-oxidns|luci-i18n-oxidns-zh-cn-*.apk
+
+# ---- natmap（内网穿透，配套 LuCI） ----
+# hahaher123/luci-app-natmap|luci-app-natmap-*.apk
+# hahaher123/luci-app-natmap|luci-i18n-natmap-zh-cn-*.apk
+
+# ---- ddns-go（DDNS 客户端 + LuCI） ----
+# hahaher123/openwrt-ddns-go|ddns-go-*_${ARCH_PACKAGES}.apk
+# hahaher123/luci-app-ddns-go|SNAPSHOT-noarch.tar.gz
+
+# ---- FlowCone (流量分载加速) ----
+QiuSimons/FlowCone|flowcone-*-${ARCH_PACKAGES}-openwrt-*.apk
+QiuSimons/FlowCone|nat6-*-${ARCH_PACKAGES}-openwrt-*.apk
+QiuSimons/FlowCone|luci-app-flowcone-*.apk
+QiuSimons/FlowCone|luci-i18n-flowcone-zh-cn-*.apk
+
+# ---- vmlinux-btf (eBPF 依赖) ----
+QiuSimons/vmlinux-btf|vmlinux-btf-*-${ARCH_PACKAGES}-openwrt-*.apk
+
+# ---- Argon 主题  ----
+jerrykuku/luci-theme-argon|luci-theme-argon-*.apk
+#jerrykuku/luci-theme-argon|luci-app-argon-config-*.apk
+#jerrykuku/luci-theme-argon|luci-i18n-argon-config-zh-cn-*.apk
+
+# ---- Mosdns& Openlist  ----
+sbwml/luci-app-mosdns|${ARCH_PACKAGES}-openwrt-25.12.tar.gz
+sbwml/luci-app-openlist2|openwrt-25.12-${ARCH_PACKAGES}.tar.gz
+
+# ---- Controlplus (管控) ----
+ilxp/controlplus-openwrt|*Controlplus*${ARCH_PACKAGES}.tar.gz
+
+# ---- AdMask 去广告) ----
+ilxp/admask-openwrt|AdMask-${ARCH_PACKAGES}-openwrt-*.tar.gz
+
+# ---- iqos ----
+ilxp/iqos-openwrt|iqos-*.apk
+ilxp/iqos-openwrt|luci-app-iqos-*.apk
+ilxp/iqos-openwrt|luci-i18n-iqos-zh-cn-*.apk
+
+# ---- ONUP (在线升级) ----
+ilxp/onup-openwrt|ONUP-${ARCH_PACKAGES}-openwrt-*.tar.gz
+
+# ---- HomeProxy (sing-box 代理插件  推荐，不要用immortalwrt的) ---- Luci界面报错
+#VIKINGYFY/packages|luci-app-homeproxy-*.apk
+#VIKINGYFY/packages|luci-i18n-homeproxy-zh-cn-*.apk
+#VIKINGYFY/packages|sing-box-*.apk
+
+# ---- UnblockNeteaseMusic-Go ----
+https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/UnblockNeteaseMusic-Go-0.2.13-r1.apk
+https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/luci-app-unblockneteasemusic-27.179.38486~d85a080.apk
+
+# ---- Podman 及其语言包 ----
+Zerogiven-OpenWRT-Packages|luci-app-podman-*_all_25.12.apk
+Zerogiven-OpenWRT-Packages|luci-i18n-podman-*-all_25.12.apk

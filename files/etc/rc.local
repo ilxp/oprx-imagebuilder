@@ -1,0 +1,32 @@
+#!/bin/sh
+# ==============================================================================
+# 每次启动后置脚本
+# ==============================================================================
+
+# 1. 硬件型号兜底（x86 工控机常见 Default string）
+if [ ! -s /tmp/sysinfo/model ] || \
+   grep -qiE "Default string|To be filled|System manufacturer|Type2" /tmp/sysinfo/model 2>/dev/null; then
+  echo "OPRX Router" > /tmp/sysinfo/model
+fi
+
+# 2. Intel pstate 优化（仅 x86 有效硬件）
+if [ -f /sys/devices/system/cpu/intel_pstate/status ] && [ "__ENABLE_INTEL_PSTATE__" = "true" ]; then
+  [ "$(cat /sys/devices/system/cpu/intel_pstate/status)" = "passive" ] && \
+    echo "active" > /sys/devices/system/cpu/intel_pstate/status 2>/dev/null
+
+  for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+    [ -f "$gov" ] && echo "__CPU_GOVERNOR__" > "$gov" 2>/dev/null
+  done
+
+  for epp in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
+    [ -f "$epp" ] && echo "balance_performance" > "$epp" 2>/dev/null
+  done
+fi
+
+# 3. BBR 兜底（sysctl.d 已设，这里再确认）
+if [ "__ENABLE_BBR__" = "true" ]; then
+  modprobe tcp_bbr 2>/dev/null || true
+  sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
+fi
+
+exit 0

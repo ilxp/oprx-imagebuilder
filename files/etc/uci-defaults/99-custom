@@ -1,0 +1,320 @@
+#!/bin/sh
+# ==============================================================================
+# 首启配置 —— 首次启动执行一次后自动删除
+# ==============================================================================
+
+LOG=/tmp/uci-defaults-99.log
+exec >> "$LOG" 2>&1
+echo "=== 99-custom $(date) ==="
+
+. /lib/functions/uci-defaults.sh
+
+# ============================================================================
+# 1. 系统身份
+# ============================================================================
+uci set system.@system[0].hostname='__HOSTNAME__'
+uci set system.@system[0].description='__DISTRIB_DESCRIPTION__'
+uci set system.@system[0].timezone='__TIMEZONE__'
+uci set system.@system[0].zonename='__ZONENAME__'
+uci set system.@system[0].conloglevel='1'
+uci set system.@system[0].cronloglevel='9'
+
+# 时区文件
+[ -f "/usr/share/zoneinfo/__ZONENAME__" ] && \
+  cp "/usr/share/zoneinfo/__ZONENAME__" /etc/localtime
+
+# NTP
+uci -q delete system.ntp.server
+for ntp in __NTP_SERVERS__; do
+  uci add_list system.ntp.server="$ntp"
+done
+
+# 语言
+uci set luci.main.lang='__LUCI_LANG__'
+
+uci commit system
+uci commit luci 2>/dev/null || true
+
+# 修改默认登录 Shell 为 bash
+if [ -x /bin/bash ]; then
+    sed -i 's|root:x:0:0:root:/root:/bin/ash|root:x:0:0:root:/root:/bin/bash|g' /etc/passwd
+    sed -i 's|root:x:0:0:root:/root:/bin/sh|root:x:0:0:root:/root:/bin/bash|g' /etc/passwd
+fi
+
+# ============================================================================
+# 2. 自动判断网口数量
+# ============================================================================
+PHYS_COUNT=0
+IFNAMES=""
+for iface in /sys/class/net/*; do
+  iface_name=$(basename "$iface")
+  if [ -e "$iface/device" ] && echo "$iface_name" | grep -Eq '^eth|^en'; then
+    PHYS_COUNT=$((PHYS_COUNT + 1))
+    IFNAMES="$IFNAMES $iface_name"
+  fi
+done
+IFNAMES=$(echo "$IFNAMES" | awk '{$1=$1};1')
+
+# ============================================================================
+# 3. 网络配置
+# ============================================================================
+if [ "$PHYS_COUNT" -eq 0 ]; then
+  echo "警告: 未检测到物理网口，保留 OpenWrt 默认配置"
+
+elif [ "$PHYS_COUNT" -eq 1 ]; then
+  # ---- 单网口 → LAN DHCP 模式（旁路由行为）----
+  uci set network.lan.proto='dhcp'
+  uci -q delete network.lan.ipaddr
+  uci -q delete network.lan.netmask
+  uci -q delete network.lan.gateway
+  uci -q delete network.lan.dns
+  uci set dhcp.lan.ignore='1'
+  uci set dhcp.lan.ra='relay' 2>/dev/null || uci set dhcp.lan.ra='server'
+  uci set dhcp.lan.dhcpv6='relay' 2>/dev/null || true
+  uci commit network
+  uci commit dhcp
+
+else
+  # ---- 多网口 → 第一个 WAN + 其余 LAN ----
+  WAN_IF=$(echo "$IFNAMES" | awk '{print $1}')
+  LAN_IFS=$(echo "$IFNAMES" | cut -d ' ' -f2-)
+  
+  uci set network.wan=interface
+  uci set network.wan.device="$WAN_IF"
+  uci set network.wan.proto='dhcp'
+  uci set network.wan6=interface
+  uci set network.wan6.device="$WAN_IF"
+  uci set network.wan6.proto='dhcpv6'
+
+  section=$(uci show network 2>/dev/null \
+    | awk -F '[.=]' '/\.@?device\[[0-9]+\]\.name=.br-lan.$/ {print $2; exit}')
+
+  if [ -z "$section" ]; then
+    uci -q delete network.lan.ifname
+    uci -q delete network.lan.ports
+    for port in $LAN_IFS; do
+      uci add_list network.lan.ports="$port"
+    done
+  else
+    uci -q delete "network.$section.ports"
+    for port in $LAN_IFS; do
+      uci add_list "network.$section.ports"="$port"
+    done
+  fi
+
+  uci set network.lan.proto='static'
+  uci set network.lan.ipaddr='__LAN_IP__'
+  uci set network.lan.netmask='255.255.255.0'
+  uci -q delete network.lan.gateway
+  uci -q delete network.lan.dns
+  uci set dhcp.lan.ignore='0'
+  uci set dhcp.lan.start='100'
+  uci set dhcp.lan.limit='150'
+  uci commit network
+  uci commit dhcp
+fi
+
+# IPv6 基础设置
+uci set network.lan.ip6assign='64' 2>/dev/null || true
+uci set network.lan.ip6ifaceid='eui64' 2>/dev/null || true
+uci commit network 2>/dev/null || true
+
+# ============================================================================
+# 4. 防火墙
+# ============================================================================
+uci set firewall.@defaults[0].input='REJECT'
+uci set firewall.@zone[0].input='ACCEPT'
+uci set firewall.@zone[1].input='REJECT'
+uci set firewall.@defaults[0].flow_offloading='0'  #默认关闭
+uci set firewall.@defaults[0].flow_offloading_hw='0'  # ★ x86 建议关硬件，只开软件
+uci set firewall.@defaults[0].synflood_protect='1'
+# 全锥形支持（如果底包支持）
+uci set firewall.@defaults[0].fullcone='1' 2>/dev/null || true
+uci set firewall.@zone[1].fullcone4='1' 2>/dev/null || true
+uci set firewall.@zone[1].fullcone6='1' 2>/dev/null || true
+
+if [ "$PHYS_COUNT" -eq 1 ]; then
+  uci -q delete firewall.allow_admin_lan
+  uci set firewall.allow_admin_lan='rule'
+  uci set firewall.allow_admin_lan.name='Allow-Admin-LAN'
+  uci set firewall.allow_admin_lan.src='lan'
+  uci set firewall.allow_admin_lan.proto='tcp'
+  uci set firewall.allow_admin_lan.dest_port='22 80 443 7681'
+  uci set firewall.allow_admin_lan.target='ACCEPT'
+fi
+uci commit firewall
+
+# ============================================================================
+# 5. 服务
+# ============================================================================
+# SSH 删除网口
+uci -q delete dropbear.@dropbear[0].Interface
+uci commit dropbear
+
+# 干掉可能抢占端口的 sshd
+/etc/init.d/sshd disable 2>/dev/null
+/etc/init.d/sshd stop 2>/dev/null
+
+uci set upnpd.config.enabled='1' 2>/dev/null || true
+uci set upnpd.config.external_iface='wan' 2>/dev/null || true
+uci commit upnpd 2>/dev/null || true
+
+uci -q get network.globals.packet_steering >/dev/null || {
+  uci set network.globals='globals'
+  uci set network.globals.packet_steering='2'
+  uci set network.globals.steering_flows='128'
+  uci commit network
+}
+
+[ "$(uci -q get rpcd.@rpcd[0].timeout 2>/dev/null || echo 0)" -lt 60 ] && \
+  uci set rpcd.@rpcd[0].timeout='60' && uci commit rpcd
+  
+# 关闭 dnsmasq 的防重绑定保护（避免 NTP 报错）
+uci set dhcp.@dnsmasq[0].rebind_protection='0'
+uci commit dhcp
+
+# ============================================================================
+# 6. 密码
+# ============================================================================
+ROOT_HASH='__ROOT_PASSWORD_HASH__'
+if [ -z "$ROOT_HASH" ] || [ "$ROOT_HASH" = "__ROOT_PASSWORD_HASH__" ]; then
+  ROOT_HASH='$6$XzQm36OLij1.lc8g$BU2GvsleiqI0R3RaCzj4IVWZC2essUVRS2ad1j7DZU./g1rdw5qslYu2DCw66IG9AQaJRnzuZAkwpWXm88Dma1'
+fi
+sed -i "s|^root:[^:]*:|root:${ROOT_HASH}:|" /etc/shadow
+
+# ============================================================================
+# 7. 系统调优
+# ============================================================================
+if [ -x /etc/init.d/zram-swap ] && [ "__ENABLE_ZRAM__" = "true" ]; then
+  MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+  SIZE_MB=$((MEM_KB * __ZRAM_PERCENT__ / 100 / 1024))
+  uci set system.@system[0].zram_size_mb="$SIZE_MB"
+  uci set system.@system[0].zram_comp_algo='__ZRAM_ALGO__'
+  uci commit system
+  /etc/init.d/zram-swap restart 2>/dev/null || true
+fi
+
+if [ "__ENABLE_BBR__" = "true" ]; then
+  modprobe tcp_bbr 2>/dev/null || true
+  echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.d/99-bbr.conf
+  sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
+fi
+
+# ============================================================================
+# 8. 换源（NJU 镜像）
+# ============================================================================
+distfeeds=/etc/apk/repositories.d/distfeeds.list
+if [ -f "$distfeeds" ] && grep -q 'downloads.openwrt.org' "$distfeeds"; then
+  sed -i 's,downloads.openwrt.org,mirror.nju.edu.cn/openwrt,g' "$distfeeds"
+fi
+
+# ============================================================================
+# 9. 禁用无用服务
+# ============================================================================
+for svc in php7-fastcgi php7-fpm php8-fastcgi php8-fpm \
+           softethervpnbridge softethervpnserver softethervpnclient \
+           haproxy kcptun socat qemu-ga podman dnsproxy; do
+  [ -x "/etc/init.d/$svc" ] || continue
+  /etc/init.d/$svc disable 2>/dev/null
+  /etc/init.d/$svc stop 2>/dev/null
+done
+
+/etc/init.d/sshd disable 2>/dev/null
+/etc/init.d/sshd stop 2>/dev/null
+
+if [ -f /etc/config/dockerd ]; then
+  uci set dockerd.globals.auto_start='1'
+  uci commit dockerd
+fi
+/etc/init.d/dockerd disable 2>/dev/null
+
+# ============================================================================
+# 10. 定制 LuCI 菜单结构
+# ============================================================================
+MENU_DIR="/usr/share/luci/menu.d"
+
+if [ -f "$MENU_DIR/luci-app-ttyd.json" ]; then
+    sed -i 's|admin/services/ttyd|admin/system/ttyd|g' "$MENU_DIR/luci-app-ttyd.json"
+fi
+if [ -f "$MENU_DIR/luci-app-upnp.json" ]; then
+    sed -i 's|"title":.*UPnP.*|"title": "UPnP",|g' "$MENU_DIR/luci-app-upnp.json"
+fi
+if [ -f "$MENU_DIR/luci-app-samba4.json" ]; then
+    sed -i 's|admin/services/samba4|admin/nas/samba4|g; s|admin/network/samba4|admin/nas/samba4|g' "$MENU_DIR/luci-app-samba4.json"
+fi
+OPENLIST_JSON=$(find "$MENU_DIR" -name "*openlist*.json" | head -n 1)
+if [ -n "$OPENLIST_JSON" ]; then
+    sed -i 's|admin/services/openlist2|admin/nas/openlist2|g; s|admin/services/openlist|admin/nas/openlist2|g; s|admin/network/openlist2|admin/nas/openlist2|g; s|admin/network/openlist|admin/nas/openlist2|g' "$OPENLIST_JSON"
+fi
+if [ -f "$MENU_DIR/luci-app-honk.json" ]; then
+    sed -i 's|admin/services/honk|admin/vpn/honk|g; s|admin/network/honk|admin/vpn/honk|g; s|admin/honk|admin/vpn/honk|g' "$MENU_DIR/luci-app-honk.json"
+fi
+if [ -f "$MENU_DIR/luci-app-homeproxy.json" ]; then
+    sed -i 's|admin/services/homeproxy|admin/vpn/homeproxy|g; s|admin/network/homeproxy|admin/vpn/homeproxy|g; s|admin/homeproxy|admin/vpn/homeproxy|g' "$MENU_DIR/luci-app-homeproxy.json"
+fi
+if [ -f "$MENU_DIR/luci-app-clashoo.json" ]; then
+    sed -i 's|admin/services/clashoo|admin/vpn/clashoo|g; s|admin/network/clashoo|admin/vpn/clashoo|g; s|admin/clashoo|admin/vpn/clashoo|g' "$MENU_DIR/luci-app-clashoo.json"
+fi
+if [ -f "$MENU_DIR/luci-app-daede.json" ]; then
+    sed -i 's|admin/services/daede|admin/vpn/daede|g; s|admin/network/daede|admin/vpn/daede|g; s|admin/daede|admin/vpn/daede|g' "$MENU_DIR/luci-app-daede.json"
+fi
+
+rm -f /usr/share/luci/menu.d/luci-app-argon-config.json
+rm -rf /tmp/luci-indexcache /tmp/luci-modulecache 2>/dev/null || true
+
+# ============================================================================
+# 11. 应用与界面深度优化（复刻 oprx）
+# ============================================================================
+rm -f /www/luci-static/resources/view/status/include/25_storage.js
+rm -f /www/luci-static/resources/view/status/include/29_ports.js
+rm -f /www/luci-static/resources/view/status/include/29_ethinfo.js
+rm -f /www/luci-static/resources/view/status/include/50_dsl.js
+rm -f /www/luci-static/resources/view/status/include/70_ddns.js
+rm -f /www/luci-static/resources/view/status/include/80_minidlna.js
+rm -f /www/luci-static/resources/view/status/include/80_upnp.js
+
+sed -i 's/<%:Up%>/<%:Move up%>/g' /usr/lib/lua/luci/view/cbi/tblsection.htm 2>/dev/null || true
+sed -i 's/<%:Down%>/<%:Move down%>/g' /usr/lib/lua/luci/view/cbi/tblsection.htm 2>/dev/null || true
+
+if [ -f /etc/samba/smb.conf.template ]; then
+    sed -i 's/invalid users = root/#&/g' /etc/samba/smb.conf.template 2>/dev/null || true
+    sed -i '/workgroup/a \\n\t## enable multi-channel' /etc/samba/smb.conf.template 2>/dev/null || true
+    sed -i '/enable multi-channel/a \\tserver multi channel support = yes' /etc/samba/smb.conf.template 2>/dev/null || true
+fi
+
+sed -i '/boot()/,+2d' /etc/init.d/ddns 2>/dev/null || true
+sed -i 's/stderr 1/stderr 0/g' /etc/init.d/nlbwmon 2>/dev/null || true
+sed -i "s/enabled '0'/enabled '1'/g" /etc/config/irqbalance 2>/dev/null || true
+sed -i 's#top -n1#\/bin\/busybox top -n1#g' /usr/share/rpcd/ucode/luci 2>/dev/null || true
+sed -i '/sip/d' /etc/modules.d/nf-nathelper-extra 2>/dev/null || true
+
+# ============================================================================
+# 12. 修复 IPv6 DHCPv6 热插拔事件（注入原版 oprx 补丁）
+# ============================================================================
+ODHCP6C_SCRIPT="/lib/netifd/dhcpv6.script"
+if [ -f "$ODHCP6C_SCRIPT" ]; then
+    # 检查是否已经打过补丁，防止重复注入
+    if ! grep -q 'hotplug-call dhcpv6' "$ODHCP6C_SCRIPT"; then
+        # 匹配行并在下方追加，注意：单引号内 $ 无需转义，BusyBox 也不支持 a\ 换行
+        sed -i '/proto_add_ipv6_route/a\			env -i ACTION="ifup" INTERFACE="$INTERFACE" DEVICE="$DEVICE" ADDR="$addr" MASK="$mask" GW="$gw" METRIC="$metric" VALID="$valid" /sbin/hotplug-call dhcpv6' "$ODHCP6C_SCRIPT"
+        echo "✓ 已注入 DHCPv6 hotplug 补丁"
+    fi
+fi
+
+# ============================================================================
+# 13. 修复与清理
+# ============================================================================
+# 修复 wget 软链接
+ln -sf /bin/uclient-fetch /usr/bin/wget
+# 修复 package-manager 执行权限
+[ -f /usr/libexec/package-manager-call ] && chmod +x /usr/libexec/package-manager-call
+
+uci commit
+rm -rf /tmp/luci-indexcache /tmp/luci-modulecache
+
+# 重新加载网络和防火墙
+/etc/init.d/network reload 2>/dev/null || true
+/etc/init.d/firewall reload 2>/dev/null || true
+
+echo "=== 99-custom 完成 ==="
+exit 0

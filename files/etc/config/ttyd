@@ -1,0 +1,4 @@
+config ttyd 'ttyd'
+	option command '/bin/login -f root'
+	option debug '0'
+	option port '7681'

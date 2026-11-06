@@ -1,0 +1,7 @@
+{
+  "X86": { "target": "x86",      "subtarget": "64",    "profile": "generic",                "conf": "x86_64" },
+  "R2S": { "target": "rockchip", "subtarget": "armv8", "profile": "friendlyarm_nanopi-r2s", "conf": "r2s" },
+  "R2C": { "target": "rockchip", "subtarget": "armv8", "profile": "friendlyarm_nanopi-r2c", "conf": "r2c" },
+  "R3S": { "target": "rockchip", "subtarget": "armv8", "profile": "friendlyarm_nanopi-r3s", "conf": "r3s" },
+  "R4S": { "target": "rockchip", "subtarget": "armv8", "profile": "friendlyarm_nanopi-r4s", "conf": "r4s" }
+}

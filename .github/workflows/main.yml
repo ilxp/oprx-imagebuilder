@@ -1,0 +1,143 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "构建目标（逗号分隔，如 X86），留空=全部"
+        type: string
+        default: "X86"
+      version:
+        description: "OpenWrt 版本（留空 = build.conf 的 VERSION，即自动获取最新版本）"
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 生成矩阵
+        id: m
+        run: |
+          ALL=$(jq -c 'to_entries | map({name: .key} + .value)' config/targets.json)
+          T="${{ inputs.targets }}"
+          if [ -z "$T" ]; then
+            M=$(echo "$ALL" | jq -c '{include: .}')
+          else
+            F=$(echo "$ALL" | jq -c --arg t "$T" \
+              '[.[] | select(.name as $n | ($t | split(",") | map(gsub("\\s"; "")) | index($n)))]')
+            M=$(echo "$F" | jq -c '{include: .}')
+          fi
+          echo "matrix=$M" >> $GITHUB_OUTPUT
+
+  build:
+    needs: setup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            zstd wget jq qemu-utils make gawk coreutils
+
+      - name: 构建 ${{ matrix.name }}
+        env:
+          ARCH_OVERRIDE: ${{ matrix.conf }}
+          VERSION_OVERRIDE: ${{ inputs.version }}
+          ROOT_PASSWORD_HASH: ${{ secrets.ROOT_PASSWORD_HASH }}
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: 读取实际构建版本号
+        id: realver
+        run: |
+          VER=$(cat output/*/version.txt | head -n 1)
+          echo "version=$VER" >> $GITHUB_OUTPUT
+          echo "✓ 本次实际构建版本: $VER"
+          
+      - name: 上传 Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OprX-${{ matrix.name }}-${{ steps.realver.outputs.version }}-${{ github.run_number }}
+          path: output/
+          retention-days: 7
+          if-no-files-found: error
+
+      # ============================================================
+      # 发布 Release —— 每次覆盖同一个版本号
+      # ============================================================
+      - name: 发布 Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VER: ${{ steps.realver.outputs.version }}
+          NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+
+          # Tag 格式：v25.12.6
+          TAG="v${VER}"
+          TITLE="OprX ${NAME} - OpenWrt ${VER}"
+
+          shopt -s nullglob
+          ASSETS=(
+            output/*/*.img.gz
+            #output/*/*.img.gz.sha256
+            output/*/*.json
+            output/*/*.vmdk
+          )
+          shopt -u nullglob
+
+          if [ ${#ASSETS[@]} -eq 0 ]; then
+            echo "::error::output/ 下没有找到任何产物"
+            exit 1
+          fi
+
+          {
+            echo "**OprX ${NAME} / OpenWrt ${VER}**"
+            echo
+            echo "默认登录 \`http://192.168.8.1\` / \`root\` / 密码：\`password\`"
+            echo
+            echo "校验：\`sha256sum -c <文件名>.sha256\`"
+
+            SKIPPED=$(find output -maxdepth 2 -name 'skipped-packages.txt' -print -quit 2>/dev/null || true)
+            if [ -n "$SKIPPED" ] && [ -s "$SKIPPED" ]; then
+              echo
+              echo "<details><summary>剔除的包（不影响使用）</summary>"
+              echo
+              echo '```'
+              cat "$SKIPPED"
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } > /tmp/notes.md
+
+          # 覆盖或创建 Release
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file /tmp/notes.md
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "$TITLE" \
+              --notes-file /tmp/notes.md
+          fi

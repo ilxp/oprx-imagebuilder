@@ -1,0 +1,48 @@
+#!/bin/sh
+# 允许 LuCI 网页端上传并安装无签名的 apk 包（复刻 sbwml 补丁）
+LOG=/tmp/uci-defaults-96.log
+exec >> "$LOG" 2>&1
+
+echo "=== 96-package-manager-patch $(date) ==="
+
+# 1. 修改前端 JS：将上传安装的指令替换为 install-upload
+TARGET_JS="/www/luci-static/resources/view/package-manager.js"
+if [ -f "$TARGET_JS" ]; then
+    # 兼容各种压缩格式（有无空格均可）
+    sed -i "s/'data-command': *'install'/'data-command':'install-upload'/g" "$TARGET_JS"
+    echo "✓ 前端 JS 补丁已应用"
+fi
+
+# 2. 修改后端执行脚本：增加 install-upload 分支
+TARGET_CALL="/usr/libexec/package-manager-call"
+if [ -f "$TARGET_CALL" ]; then
+    # 放行外层 case 判断
+    sed -i 's/^[ \t]*install|update|upgrade|remove)/\tinstall|install-upload|update|upgrade|remove)/g' "$TARGET_CALL"
+    
+    # ★ 最安全的做法：在 remove) 前面插入新的 case 分支，绝不破坏原有的 ;; 结构
+    sed -i '/^[ \t]*remove)$/i\
+\t\t\t\t\tinstall-upload)\
+\t\t\t\t\t\taction="add --allow-untrusted"\
+\t\t\t\t\t;;' "$TARGET_CALL"
+    
+    # ★ 必须恢复执行权限！（之前踩坑就是因为 mv 覆盖丢了 755 权限）
+    chmod +x "$TARGET_CALL"
+    echo "✓ 后端执行脚本补丁已应用，并已修复执行权限"
+fi
+
+# 3. 修改权限控制文件：放行 install-upload 的 RPC 执行权限
+TARGET_ACL="/usr/share/rpcd/acl.d/luci-app-package-manager.json"
+if [ -f "$TARGET_ACL" ]; then
+    # 在 install * 的权限后面追加 install-upload 的权限
+    sed -i '/"\/usr\/libexec\/package-manager-call install \*":/a\
+\t\t\t\t"/usr/libexec/package-manager-call install-upload": [ "exec" ],\
+\t\t\t\t"/usr/libexec/package-manager-call install-upload *": [ "exec" ],' "$TARGET_ACL"
+    echo "✓ ACL 权限补丁已应用"
+fi
+
+# 重启相关服务使配置生效
+/etc/init.d/rpcd restart 2>/dev/null || true
+rm -rf /tmp/luci-indexcache /tmp/luci-modulecache 2>/dev/null || true
+
+echo "=== 96-package-manager-patch 完成 ==="
+exit 0

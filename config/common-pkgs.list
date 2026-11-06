@@ -1,0 +1,236 @@
+# ==============================================================================
+# 所有 target 通用预装
+# ==============================================================================
+
+# ---- LuCI 核心 ----
+luci
+luci-mod-admin-full
+luci-mod-status
+luci-mod-system
+luci-mod-network
+luci-compat
+luci-app-package-manager
+luci-proto-wireguard
+
+# ---- LuCI 官方应用 ----
+luci-app-ddns
+luci-app-upnp
+luci-app-ttyd
+luci-app-samba4
+luci-app-zerotier
+
+# ---- 主题 ----
+luci-theme-bootstrap
+
+# ---- 简体中文 ----
+luci-i18n-base-zh-cn
+luci-i18n-firewall-zh-cn
+luci-i18n-package-manager-zh-cn
+luci-i18n-ttyd-zh-cn
+luci-i18n-ddns-zh-cn
+luci-i18n-samba4-zh-cn
+luci-i18n-upnp-zh-cn
+
+# ---- 网络基础（纯 nftables 体系） ----
+dnsmasq-full
+firewall4
+miniupnpd-nftables
+bind-host
+
+# ---- SSL / 证书 ----
+libopenssl-conf
+libopenssl-devcrypto
+libopenssl-legacy
+libcurl
+libustream-openssl
+ca-bundle
+
+# ---- SSH（dropbear 主用，仅保留 sftp-server） ----
+dropbear
+openssh-sftp-server
+
+# ---- 内核：文件系统 ----
+kmod-fs-ext4
+kmod-fs-vfat
+kmod-fs-exfat
+kmod-fs-ntfs3
+kmod-fs-xfs
+kmod-fs-f2fs
+
+# ---- 内核：nft 防火墙基础 ----
+kmod-nft-offload
+kmod-nft-tproxy
+kmod-nft-socket
+kmod-nf-socket
+
+# ---- 内核：网络转发 ----
+kmod-tun
+kmod-veth
+kmod-bonding
+kmod-br-netfilter
+kmod-ipvlan
+kmod-ifb
+
+# ---- 内核：IPSec / IPv6 ----
+kmod-ipsec4
+kmod-ipsec6
+kmod-ipt-nat6
+kmod-ipt-tproxy
+kmod-iptunnel6
+
+# ---- 内核：QoS / TCP / eBPF ----
+kmod-sched
+kmod-sched-core
+kmod-sched-cake
+kmod-sched-bpf
+kmod-tcp-bbr
+kmod-tls
+kmod-inet-diag
+
+# ---- 内核：中文编码（挂 U 盘/共享） ----
+kmod-nls-cp936
+kmod-nls-cp950
+
+# ---- 内核：USB 存储与网络 ----
+kmod-usb2
+kmod-usb2-pci
+kmod-usb3
+kmod-usb-storage-uas
+kmod-usb-hid
+kmod-usb-audio
+kmod-usb-net-asix
+kmod-usb-net-asix-ax88179
+kmod-usb-net-rtl8150
+kmod-usb-net-rtl8152
+kmod-usb-net-rndis
+kmod-usb-net-ipheth
+kmod-usb-net-cdc-ether
+
+# ---- 内核：WiFi / 其他 ----
+kmod-mac80211
+kmod-button-hotplug
+kmod-ikconfig
+
+# ---- 内核：加密（完整 53 个） ----
+kmod-crypto-acompress
+kmod-crypto-aead
+kmod-crypto-arc4
+kmod-crypto-authenc
+kmod-crypto-blake2b
+kmod-crypto-cbc
+kmod-crypto-ccm
+kmod-crypto-chacha20poly1305
+kmod-crypto-cmac
+kmod-crypto-crc32
+kmod-crypto-crc32c
+kmod-crypto-ctr
+kmod-crypto-cts
+kmod-crypto-deflate
+kmod-crypto-des
+kmod-crypto-ecb
+kmod-crypto-ecdh
+kmod-crypto-echainiv
+kmod-crypto-essiv
+kmod-crypto-fcrypt
+kmod-crypto-gcm
+kmod-crypto-geniv
+kmod-crypto-gf128
+kmod-crypto-ghash
+kmod-crypto-hash
+kmod-crypto-hmac
+kmod-crypto-kpp
+kmod-crypto-lib-chacha20
+kmod-crypto-lib-chacha20poly1305
+kmod-crypto-lib-curve25519
+kmod-crypto-lib-poly1305
+kmod-crypto-manager
+kmod-crypto-md4
+kmod-crypto-md5
+kmod-crypto-michael-mic
+kmod-crypto-misc
+kmod-crypto-null
+kmod-crypto-pcbc
+kmod-crypto-rmd160
+kmod-crypto-rng
+kmod-crypto-rsa
+kmod-crypto-seqiv
+kmod-crypto-sha1
+kmod-crypto-sha256
+kmod-crypto-sha3
+kmod-crypto-sha512
+kmod-crypto-test
+kmod-crypto-user
+kmod-crypto-xcbc
+kmod-crypto-xts
+kmod-crypto-xxhash
+
+# ---- zram 内存压缩 ----
+zram-swap
+kmod-lib-lz4
+kmod-lib-lzo
+kmod-lib-zstd
+
+# ---- 系统工具 ----
+bash
+coreutils-dircolors
+coreutils-stty
+zsh
+ethtool
+htop
+coremark
+acpid
+qemu-ga
+stuntman-client
+usbmuxd
+qrencode
+iperf3
+lrzsz
+lsblk
+lscpu
+lsof
+pciutils
+resize2fs
+rsync
+screen
+sed
+sudo
+tar
+taskset
+tree
+unzip
+usbutils
+vim
+wget-ssl
+xz-utils
+xz
+iputils-ping
+rename
+acl
+
+# ---- 磁盘工具 ----
+dosfstools
+exfat-fsck
+exfat-mkfs
+f2fs-tools
+fdisk
+file
+xfs-admin
+xfs-fsck
+xfs-growfs
+xfs-mkfs
+
+# ---- DDNS ----
+ddns-scripts
+ddns-scripts-aliyun
+ddns-scripts-cloudflare
+ddns-scripts-dnspod
+ddns-scripts-freedns
+ddns-scripts-godaddy
+ddns-scripts-services
+
+# ---- 其他官方 ----
+podman
+zerotier
+
+# 强制排除 argon-config
+-luci-app-argon-config
