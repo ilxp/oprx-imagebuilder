@@ -7,8 +7,8 @@ on:
         description: "构建目标（逗号分隔，如 X86），留空=全部"
         type: string
         default: "X86"
-    version:
-        description: "版本（【留空=用 build.conf 的 VERSION）】;【输入：稳定版输入：25.12.6；稳定分支快照：25.12-SNAPSHOT；开发快照：SNAPSHOT】"
+      version:
+        description: "版本。留空=用 build.conf 的 VERSION；稳定版如 25.12.6；稳定分支快照如 25.12-SNAPSHOT；开发快照填 SNAPSHOT"
         type: string
         default: ""
 
