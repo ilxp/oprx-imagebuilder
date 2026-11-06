@@ -56,6 +56,10 @@ ib_release_path() {
   printf 'releases/%s' "$v"
 }
 
+# ========== 展开 ImageBuilder 下载 URL ==========
+# 依赖变量（由 load_config 先加载）：
+#   IMAGEBUILDER_BASE_URL IB_DISTRO IB_PRODUCT IB_URL_OVERRIDE VERSION
+#   TARGET SUBTARGET IB_ARCH_TAG IB_HOST_TAG
 ib_url() {
   # ---- escape hatch：自建源 ----
   if [[ -n "${IB_URL_OVERRIDE:-}" ]]; then
@@ -71,7 +75,10 @@ ib_url() {
 
   local base="${IMAGEBUILDER_BASE_URL%/}"
 
-  # ---- 展开 __RELEASE_PATH__（新写法）；否则展开 __VERSION__（向后兼容）----
+  # ---- 展开 __DISTRO__（域名）----
+  base="${base//__DISTRO__/$IB_DISTRO}"
+
+  # ---- 展开 __RELEASE_PATH__（渠道+版本）；兼容旧写法 __VERSION__ ----
   local rel_path
   rel_path="$(ib_release_path)"
   if [[ "$base" == *"__RELEASE_PATH__"* ]]; then
@@ -117,9 +124,35 @@ load_config() {
   ARCH="${ARCH_OVERRIDE:-$DEFAULT_TARGET}"
 
   # ---- 版本号优先级：override > config VERSION > DEFAULT_VERSION ----
-  # 注：__RELEASE_PATH__ 下版本无法从 URL 提取，必须显式给或走 DEFAULT_VERSION
+  # override 支持 <distro>/<version> 格式：
+  #   openwrt/25.12.6          → IB_DISTRO=openwrt, VERSION=25.12.6
+  #   immortalwrt/25.12.2      → IB_DISTRO=immortalwrt, VERSION=25.12.2
+  #   immortalwrt/25.12-SNAPSHOT → IB_DISTRO=immortalwrt, VERSION=25.12-SNAPSHOT
+  #   openwrt/SNAPSHOT         → IB_DISTRO=openwrt, VERSION=SNAPSHOT
+  #   25.12.6（无 /）          → 只覆盖 VERSION，IB_DISTRO 保持 build.conf
   if [[ -n "${VERSION_OVERRIDE:-}" ]]; then
-    VERSION="$VERSION_OVERRIDE"
+    if [[ "$VERSION_OVERRIDE" == */* ]]; then
+      local ov_distro="${VERSION_OVERRIDE%%/*}"
+      local ov_version="${VERSION_OVERRIDE#*/}"
+
+      if [[ ! "$ov_distro" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+        log_error "VERSION_OVERRIDE 的发行版名不合法: $ov_distro"
+        log_error "  格式应为 <distro>/<version>，如 openwrt/25.12.6"
+        exit 1
+      fi
+      if [[ -z "$ov_version" ]]; then
+        log_error "VERSION_OVERRIDE 解析后版本为空: $VERSION_OVERRIDE"
+        exit 1
+      fi
+
+      if [[ "$ov_distro" != "$IB_DISTRO" ]]; then
+        log_info "发行版: $ov_distro (VERSION_OVERRIDE 覆盖 build.conf 的 $IB_DISTRO)"
+        IB_DISTRO="$ov_distro"
+      fi
+      VERSION="$ov_version"
+    else
+      VERSION="$VERSION_OVERRIDE"
+    fi
     log_info "版本: $VERSION (VERSION_OVERRIDE / GitHub input)"
   elif [[ -n "${VERSION:-}" ]]; then
     log_info "版本: $VERSION (config VERSION)"
@@ -128,7 +161,7 @@ load_config() {
     log_warn "VERSION 为空，回退 DEFAULT_VERSION: $VERSION"
   fi
 
-  # 推导 release path 并打印，便于确认渠道
+  log_info "发行版: $IB_DISTRO"
   log_info "渠道: $(ib_release_path)"
 
   # ---- 加载 Target 设备配置 ----
@@ -298,8 +331,9 @@ prepare_repos() {
     fi
 
     # ---- 占位符展开 ----
-    url="${url//__RELEASE_PATH__/$release_path}"
-    url="${url//__VERSION__/$VERSION}"                # 保留（第三方源用）
+    url="${url//__DISTRO__/$IB_DISTRO}"                 
+    url="${url//__RELEASE_PATH__/$(ib_release_path)}"   
+    url="${url//__VERSION__/$VERSION}"                  # 保留（第三方源可能用）
     url="${url//__ARCH__/$ARCH_PACKAGES}"
     url="${url//__TARGET__/$TARGET}"
     url="${url//__SUBTARGET__/$SUBTARGET}"
