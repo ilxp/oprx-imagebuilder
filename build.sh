@@ -30,15 +30,15 @@ _expand_vars() {
   printf '%s' "$s"
 }
 
-# ========== 从 base URL 提取版本（供 REPOS / 产物命名 / Release tag 用）==========
+# ========== 从 base URL 提取版本（仅模式 A 有效）==========
+# 模式 B（base URL 含 __VERSION__）返回空，表示"版本不来自 URL"
 ib_version_from_base_url() {
   local base="${IMAGEBUILDER_BASE_URL%/}"
+  [[ "$base" == *"__VERSION__"* ]] && return 0
   if [[ "$base" =~ /snapshots/targets$ ]]; then
     printf 'SNAPSHOT'
   elif [[ "$base" =~ /releases/([^/]+)/targets$ ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
-  else
-    printf ''
   fi
 }
 
@@ -59,9 +59,11 @@ ib_url() {
     return
   fi
 
+  # ---- 模式 B：先把 __VERSION__ 展开 ----
   local base="${IMAGEBUILDER_BASE_URL%/}"
+  base="${base//__VERSION__/$VERSION}"
 
-  # ---- product 推导 ----
+  # ---- product 推导（展开后仍能匹配 immortalwrt / openwrt）----
   local product="${IB_PRODUCT:-}"
   if [[ -z "$product" ]]; then
     if [[ "$base" == *immortalwrt* ]]; then
@@ -76,7 +78,7 @@ ib_url() {
     fi
   fi
 
-  # ---- channel / version 推导 + 拼 URL ----
+  # ---- 在展开后的 base 上正则匹配 ----
   local out
   if [[ "$base" =~ /snapshots/targets$ ]]; then
     out="${base}/${TARGET}/${SUBTARGET}/${product}-imagebuilder-${IB_ARCH_TAG}.${IB_HOST_TAG}.tar.zst"
@@ -84,7 +86,7 @@ ib_url() {
     local ver="${BASH_REMATCH[1]}"
     out="${base}/${TARGET}/${SUBTARGET}/${product}-imagebuilder-${ver}-${IB_ARCH_TAG}.${IB_HOST_TAG}.tar.zst"
   else
-    log_error "IMAGEBUILDER_BASE_URL 格式不对，必须以 /releases/<版本>/targets 或 /snapshots/targets 结尾："
+    log_error "IMAGEBUILDER_BASE_URL 格式不对（展开后），必须以 /releases/<版本>/targets 或 /snapshots/targets 结尾："
     log_error "  $base"
     exit 1
   fi
@@ -96,32 +98,33 @@ load_config() {
   . "$ROOT/config/build.conf"
   ARCH="${ARCH_OVERRIDE:-$DEFAULT_TARGET}"
 
-  # ---- 版本号：override > config VERSION > 从 base URL 提取 > 兜底 ----
+  # ---- 版本号优先级：override > config VERSION > base URL 提取 > DEFAULT_VERSION ----
   if [[ -n "${VERSION_OVERRIDE:-}" ]]; then
     VERSION="$VERSION_OVERRIDE"
-    log_info "版本: $VERSION (VERSION_OVERRIDE)"
-    # 若没走 IB_URL_OVERRIDE，检查 VERSION 与 base URL 是否一致，避免"改了变量但下载的没变"
-    if [[ -z "${IB_URL_OVERRIDE:-}" ]]; then
+    log_info "版本: $VERSION (VERSION_OVERRIDE / GitHub input)"
+
+    # 模式 A 冲突检查：base URL 写死版本且与 input 不一致 → 下载不会被改，警告
+    if [[ -z "${IB_URL_OVERRIDE:-}" && "$IMAGEBUILDER_BASE_URL" != *"__VERSION__"* ]]; then
       local base_ver
       base_ver="$(ib_version_from_base_url)"
       if [[ -n "$base_ver" && "$base_ver" != "$VERSION" ]]; then
-        log_warn "VERSION_OVERRIDE=$VERSION 与 base URL 里的版本 $base_ver 不一致"
-        log_warn "  下载的仍是 base URL 的 $base_ver；如要真正换版本，请改 IMAGEBUILDER_BASE_URL"
+        log_warn "VERSION_OVERRIDE=$VERSION 与 base URL 写死的版本 $base_ver 不一致"
+        log_warn "  下载的仍是 $base_ver；如要让 input 真正生效，把 base URL 版本段改成 __VERSION__"
+        log_warn "  当前：$IMAGEBUILDER_BASE_URL"
       fi
     fi
+
   elif [[ -n "${VERSION:-}" ]]; then
-    log_info "版本: $VERSION (config)"
-  elif [[ -n "${IB_URL_OVERRIDE:-}" ]]; then
-    log_error "IB_URL_OVERRIDE 已设置，但 VERSION 为空"
-    log_error "  请在 build.conf 里设置 VERSION，或在 workflow 传 VERSION_OVERRIDE"
-    exit 1
+    log_info "版本: $VERSION (config VERSION)"
+
   else
     VERSION="$(ib_version_from_base_url)"
     if [[ -n "$VERSION" ]]; then
-      log_ok "版本从 IMAGEBUILDER_BASE_URL 提取: $VERSION"
+      log_ok "版本从 base URL 提取: $VERSION"
     else
       VERSION="$DEFAULT_VERSION"
-      log_warn "base URL 提取失败，回退 DEFAULT_VERSION: $VERSION"
+      log_warn "base URL 是占位符且未指定版本，回退 DEFAULT_VERSION: $VERSION"
+      log_warn "  如需指定，改 DEFAULT_VERSION，或在 workflow 传 version 输入"
     fi
   fi
 
@@ -195,7 +198,6 @@ download_imagebuilder() {
     fi
     rm -f "$WORK_DIR/sha256sums"
   else
-    # 自建源可能没有 sha256sums，降级为警告
     log_warn "无法下载 sha256sums，跳过校验"
   fi
 
