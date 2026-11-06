@@ -40,14 +40,40 @@ ib_short_date() {
   printf '%s.%d.%d' "$yy" "$mm" "$dd"
 }
 
-# ========== 由 VERSION 推导 RELEASE_PATH ==========
-# 大小写不敏感：
-#   "" / "SNAPSHOT" / "snapshot"  → snapshots
-#   "25.12-SNAPSHOT" / "25.12-snapshot" → releases/25.12-SNAPSHOT
-#   "25.12.6"                    → releases/25.12.6
+# ========== 由 VERSION / IB_CHANNEL 推导 RELEASE_PATH ==========
+# 优先级：
+#   1. IB_CHANNEL 显式指定（"releases" / "snapshots"）→ 直接返回，VERSION 只用于命名
+#   2. 从 VERSION 自动推导（大小写不敏感）
+#
+# 自动推导：
+#   "" / "SNAPSHOT" / "snapshot"          → snapshots
+#   "25.12-SNAPSHOT" / "25.12-snapshot"   → releases/25.12-SNAPSHOT
+#   "25.12.6"                             → releases/25.12.6
+#
 # 用 tr 而非 ${v,,}：兼容 macOS 自带 bash 3.2
 ib_release_path() {
   local v="${1:-$VERSION}"
+
+  # ---- ① 显式 channel override（最高优先）----
+  # snapshots + 短日期（如 26.11.6）必须走这里，否则 26.11.6 会被当稳定版
+  if [[ -n "${IB_CHANNEL:-}" ]]; then
+    case "$IB_CHANNEL" in
+      snapshots|snapshot)
+        printf 'snapshots'
+        return
+        ;;
+      releases|release)
+        printf 'releases/%s' "$v"
+        return
+        ;;
+      *)
+        log_error "IB_CHANNEL 不合法: $IB_CHANNEL（应为 releases 或 snapshots）"
+        exit 1
+        ;;
+    esac
+  fi
+
+  # ---- ② 自动推导 ----
   local lower
   lower=$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')
 
