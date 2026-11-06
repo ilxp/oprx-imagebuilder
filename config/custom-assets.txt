@@ -15,8 +15,6 @@
 # ---- Autocore &SFE (系统信息监控) ----
 #ilxp/oprx-imagebuilder|autocore-*.apk
 https://github.com/ilxp/oprx-imagebuilder/releases/download/apks/autocore-x86-1.0.1-r1.apk
-https://github.com/ilxp/oprx-imagebuilder/releases/download/apks/kmod-shortcut-fe-6.12.94-r8.apk
-https://github.com/ilxp/oprx-imagebuilder/releases/download/apks/kmod-shortcut-fe-cm-6.12.94-r8.apk
 
 # ---- Honk  ----  
 QiuSimons/luci-app-honk|honk-*-${ARCH_PACKAGES}-openwrt-*.apk
