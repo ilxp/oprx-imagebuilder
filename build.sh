@@ -541,14 +541,14 @@ fetch_custom_packages() {
       log_ok "自建包已追加，总计: $(echo "$PACKAGES" | wc -w) 个"
     fi
   fi
+  
+  # 预先为自建包生成索引 ==========
+  if [ -d "$IB_DIR/packages" ] && ls "$IB_DIR/packages"/*.apk >/dev/null 2>&1; then
+      log_info "正在为本地自建包生成 packages.adb 索引..."
+      # 使用 ImageBuilder 自带的 host 工具链里的 apk 命令
+      ( cd "$IB_DIR/packages" && "${IB_DIR}/staging_dir/host/bin/apk" mkndx *.apk > packages.adb 2>/dev/null ) || true
+  fi
 }
-
-# ========== 6c. 预先为自建包生成索引 ==========
-if [ -d "$IB_DIR/packages" ] && ls "$IB_DIR/packages"/*.apk >/dev/null 2>&1; then
-    log_info "正在为本地自建包生成索引..."
-    # 进入 packages 目录，调用宿主机的 apk 命令生成索引
-    ( cd "$IB_DIR/packages" && apk mkndx *.apk > packages.adb 2>/dev/null ) || true
-fi
   
 # ========== 7. 准备覆盖层（占位符替换） ==========
 stage_overlay() {
