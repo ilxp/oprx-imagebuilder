@@ -375,6 +375,7 @@ PYEOF
 }
 
 # ========== 5. 准备仓库（构建时 + 刷机后） ==========
+# ========== 5. 准备仓库（构建时 + 刷机后） ==========
 prepare_repos() {
   mkdir -p "$IB_DIR/keys"
 
@@ -383,15 +384,16 @@ prepare_repos() {
   mkdir -p "$overlay_repo_dir" "$overlay_key_dir"
 
   local release_path
-  release_path="$(ib_release_path)"    # snapshots 或 releases/x.y.z
+  release_path="$(ib_release_path)"    # snapshots 或 releases/x.y.z 或 releases/x.y-SNAPSHOT
 
   # ---- ① 修正 IB 自带 repositories 里残留的 releases/<短日期> ----
+  # 场景：build_workspace 残留过 releases 构建的 IB，snapshots 下会 404
   if [[ -f "$IB_DIR/repositories" && "$release_path" == "snapshots" ]]; then
     if grep -qE '/releases/[0-9]+\.[0-9]+\.[0-9]+/' "$IB_DIR/repositories"; then
       sed -i -E 's|/releases/[0-9]+\.[0-9]+\.[0-9]+/|/snapshots/|g' "$IB_DIR/repositories"
       log_info "已修正 IB 自带 repositories：releases/<短日期> → snapshots"
     fi
-    # 清理上次构建残留的第三方源（非 downloads.openwrt.org 的行）
+    # 清理残留的第三方源（snapshots 下不使用第三方源）
     if grep -qvE 'downloads\.openwrt\.org' "$IB_DIR/repositories" 2>/dev/null; then
       grep -E 'downloads\.openwrt\.org' "$IB_DIR/repositories" > "${IB_DIR}/repositories.tmp" || true
       if [[ -s "${IB_DIR}/repositories.tmp" ]]; then
@@ -413,37 +415,52 @@ prepare_repos() {
     [[ -z "$name" || "$name" == \#* ]] && continue
     [[ "$enabled" == "true" ]] || continue
 
-    # ---- ② 展开占位符（顺序：__DISTRO__ → __RELEASE_PATH__ → __VERSION__ → 其余）----
+    # ---- ② 展开 __DISTRO__（最先，后续判断依赖域名）----
     url="${url//__DISTRO__/$IB_DISTRO}"
+
+    # ---- ③ 展开 __RELEASE_PATH__ ----
+    # releases/x.y.z 或 releases/x.y-SNAPSHOT 或 snapshots
     url="${url//__RELEASE_PATH__/$release_path}"
+
+    # ---- ④ 展开 __VERSION__（第三方源可能用）----
     url="${url//__VERSION__/$VERSION}"
+
+    # ---- ⑤ 正确展开 __SERIES__ ----
+    #   25.12.6          → 25.12
+    #   25.12-SNAPSHOT   → 25.12
+    #   25.12            → 25
+    #   SNAPSHOT         → SNAPSHOT（snapshots 场景，第三方源本来就会跳过）
+    local series="${VERSION}"
+    if [[ "$VERSION" == *-SNAPSHOT ]]; then
+      series="${VERSION%-SNAPSHOT}"      # 25.12-SNAPSHOT → 25.12
+    else
+      series="${VERSION%.*}"             # 25.12.6 → 25.12
+    fi
+    url="${url//__SERIES__/$series}"
+
+    # ---- ⑥ 展开其余占位符 ----
     url="${url//__ARCH__/$ARCH_PACKAGES}"
     url="${url//__TARGET__/$TARGET}"
     url="${url//__SUBTARGET__/$SUBTARGET}"
-    url="${url//__SERIES__/${VERSION%.*}}"
 
-    # ---- ③ 防御：snapshots 下强制改写 releases/<x.y.z> → snapshots ----
-    if [[ "$release_path" == "snapshots" ]]; then
-      url=$(printf '%s' "$url" | sed -E 's|/releases/[0-9]+\.[0-9]+\.[0-9]+/|/snapshots/|g')
-    fi
-
-    # ---- ④ 官方源：name 以 official 开头 → 只写 overlay，不追加 IB repositories ----
+    # ---- ⑦ 官方源：name 以 official 开头 → 只写 overlay，不追加 IB repositories ----
+    # IB 自带 repositories 里已有正确的官方源，重复追加会造成 apk 多次请求
     if [[ "$name" == official* ]]; then
       log_info "跳过 ${name} 的 IB repositories 追加（官方源已内置）"
       echo "$url" > "${overlay_repo_dir}/${name}.list"
       continue
     fi
 
-    # ---- ⑤ snapshots 下跳过所有第三方源 ----
+    # ---- ⑧ snapshots 渠道跳过所有第三方源 ----
     # 原因：cooluc / dllkids / qiusimons 只提供 releases 版本，
-    # __SERIES__ 在 snapshots 下展开成 26.11（短日期前两段），URL 不存在。
+    # __SERIES__ 在 snapshots 下展开成 SNAPSHOT，URL 不存在。
     if [[ "$release_path" == "snapshots" ]]; then
       log_warn "snapshots 渠道跳过第三方源 ${name}（只提供 releases）"
       skipped_thirdparty=$((skipped_thirdparty + 1))
       continue
     fi
 
-    # ---- 第三方源：追加 + 写 overlay + 下密钥 ----
+    # ---- ⑨ 第三方源：追加到 IB repositories + 写 overlay + 下密钥 ----
     echo "$url" >> "$IB_DIR/repositories"
     echo "$url" > "${overlay_repo_dir}/${name}.list"
 
