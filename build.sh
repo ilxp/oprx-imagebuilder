@@ -382,41 +382,43 @@ prepare_repos() {
   local overlay_key_dir="$ROOT/files/etc/apk/keys"
   mkdir -p "$overlay_repo_dir" "$overlay_key_dir"
 
-  # ImageBuilder 25.12 的 repositories 是 apk v3 纯 URL 格式
+  # ---- IB 自带 repositories 的 releases/<短日期> → snapshots ----
+  if [[ -f "$IB_DIR/repositories" && "$(ib_release_path)" == "snapshots" ]]; then
+    if grep -qE '/releases/[0-9]+\.[0-9]+\.[0-9]+/' "$IB_DIR/repositories"; then
+      sed -i -E 's|/releases/[0-9]+\.[0-9]+\.[0-9]+/|/snapshots/|g' "$IB_DIR/repositories"
+      log_info "已修正 IB 自带 repositories：releases/<短日期> → snapshots"
+    fi
+  fi
+
   local orig_count=0
   [[ -f "$IB_DIR/repositories" ]] && orig_count=$(grep -cE '^https?://' "$IB_DIR/repositories" || true)
   log_info "ImageBuilder 内置 ${orig_count} 个官方仓库（保留）"
 
   local count=0
   local release_path
-  release_path="$(ib_release_path)"          # 只算一次，循环里复用
+  release_path="$(ib_release_path)"
 
   while IFS='|' read -r name url key_url enabled; do
     [[ -z "$name" || "$name" == \#* ]] && continue
     [[ "$enabled" == "true" ]] || continue
 
-    # 官方源（downloads.openwrt.org）已经由 ImageBuilder 自带，跳过避免重复
-    #if [[ "$url" == *"downloads.openwrt.org"* ]]; then
-      #log_info "跳过 ${name}（官方源已内置）"
-      #continue
-    #fi
+    if [[ "$url" == *"downloads.openwrt.org"* ]]; then
+      log_info "跳过 ${name}（官方源已内置）"
+      continue
+    fi
 
     # ---- 占位符展开 ----
-	url="${url//__DISTRO__/${IB_DISTRO:-openwrt}}"	
-    url="${url//__RELEASE_PATH__/$(ib_release_path)}"   
-    url="${url//__VERSION__/$VERSION}"                  # 保留（第三方源可能用）
+    url="${url//__DISTRO__/$IB_DISTRO}"
+    url="${url//__RELEASE_PATH__/$release_path}"
+    url="${url//__VERSION__/$VERSION}"
     url="${url//__ARCH__/$ARCH_PACKAGES}"
     url="${url//__TARGET__/$TARGET}"
     url="${url//__SUBTARGET__/$SUBTARGET}"
     url="${url//__SERIES__/${VERSION%.*}}"
 
-    # ① 构建时：纯 URL 追加（与 IB 自带格式一致）
     echo "$url" >> "$IB_DIR/repositories"
-
-    # ② 刷机后：纯 URL 写入 files/etc/apk/repositories.d/<name>.list
     echo "$url" > "${overlay_repo_dir}/${name}.list"
 
-    # ③ 密钥：两处都要
     if [[ -n "$key_url" && "$key_url" != "(内置)" ]]; then
       local kf_ib="$IB_DIR/keys/${name}.rsa.pub"
       local kf_ov="${overlay_key_dir}/${name}.rsa.pub"
