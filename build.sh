@@ -391,6 +391,16 @@ prepare_repos() {
       sed -i -E 's|/releases/[0-9]+\.[0-9]+\.[0-9]+/|/snapshots/|g' "$IB_DIR/repositories"
       log_info "已修正 IB 自带 repositories：releases/<短日期> → snapshots"
     fi
+    # 清理上次构建残留的第三方源（非 downloads.openwrt.org 的行）
+    if grep -qvE 'downloads\.openwrt\.org' "$IB_DIR/repositories" 2>/dev/null; then
+      grep -E 'downloads\.openwrt\.org' "$IB_DIR/repositories" > "${IB_DIR}/repositories.tmp" || true
+      if [[ -s "${IB_DIR}/repositories.tmp" ]]; then
+        mv "${IB_DIR}/repositories.tmp" "$IB_DIR/repositories"
+        log_info "已清理 IB repositories 里残留的第三方源（snapshots 下不使用）"
+      else
+        rm -f "${IB_DIR}/repositories.tmp"
+      fi
+    fi
   fi
 
   local orig_count=0
@@ -398,11 +408,12 @@ prepare_repos() {
   log_info "ImageBuilder 内置 ${orig_count} 个官方仓库（保留）"
 
   local count=0
+  local skipped_thirdparty=0
   while IFS='|' read -r name url key_url enabled; do
     [[ -z "$name" || "$name" == \#* ]] && continue
     [[ "$enabled" == "true" ]] || continue
 
-    # ---- ② 展开顺序：__DISTRO__ → __RELEASE_PATH__ → __VERSION__ → 其余 ----
+    # ---- ② 展开占位符（顺序：__DISTRO__ → __RELEASE_PATH__ → __VERSION__ → 其余）----
     url="${url//__DISTRO__/$IB_DISTRO}"
     url="${url//__RELEASE_PATH__/$release_path}"
     url="${url//__VERSION__/$VERSION}"
@@ -417,11 +428,18 @@ prepare_repos() {
     fi
 
     # ---- ④ 官方源：name 以 official 开头 → 只写 overlay，不追加 IB repositories ----
-    # 你的 REPOS 有 official-base / official-luci / ... / official-target，
-    # 用前缀匹配才能全命中
     if [[ "$name" == official* ]]; then
       log_info "跳过 ${name} 的 IB repositories 追加（官方源已内置）"
       echo "$url" > "${overlay_repo_dir}/${name}.list"
+      continue
+    fi
+
+    # ---- ⑤ snapshots 下跳过所有第三方源 ----
+    # 原因：cooluc / dllkids / qiusimons 只提供 releases 版本，
+    # __SERIES__ 在 snapshots 下展开成 26.11（短日期前两段），URL 不存在。
+    if [[ "$release_path" == "snapshots" ]]; then
+      log_warn "snapshots 渠道跳过第三方源 ${name}（只提供 releases）"
+      skipped_thirdparty=$((skipped_thirdparty + 1))
       continue
     fi
 
@@ -442,6 +460,9 @@ prepare_repos() {
     count=$((count + 1))
   done <<< "$REPOS"
 
+  if [[ "$skipped_thirdparty" -gt 0 ]]; then
+    log_warn "snapshots 渠道跳过 ${skipped_thirdparty} 个第三方源"
+  fi
   log_ok "追加 ${count} 个第三方仓库（官方 ${orig_count} 个保留）"
 }
 
