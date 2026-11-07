@@ -396,13 +396,13 @@ prepare_repos() {
     [[ "$enabled" == "true" ]] || continue
 
     # 官方源（downloads.openwrt.org）已经由 ImageBuilder 自带，跳过避免重复
-    if [[ "$url" == *"downloads.openwrt.org"* ]]; then
-      log_info "跳过 ${name}（官方源已内置）"
-      continue
-    fi
+    #if [[ "$url" == *"downloads.openwrt.org"* ]]; then
+      #log_info "跳过 ${name}（官方源已内置）"
+      #continue
+    #fi
 
     # ---- 占位符展开 ----
-    url="${url//__DISTRO__/$IB_DISTRO}"                 
+	url="${url//__DISTRO__/${IB_DISTRO:-openwrt}}"	
     url="${url//__RELEASE_PATH__/$(ib_release_path)}"   
     url="${url//__VERSION__/$VERSION}"                  # 保留（第三方源可能用）
     url="${url//__ARCH__/$ARCH_PACKAGES}"
@@ -542,7 +542,7 @@ fetch_custom_packages() {
     fi
   fi
 }
-
+  
 # ========== 7. 准备覆盖层（占位符替换） ==========
 stage_overlay() {
   local overlay="$WORK_DIR/overlay"
@@ -728,8 +728,8 @@ make_image_with_self_heal() {
          FILES="$overlay" \
          ROOTFS_PARTSIZE="$ROOTFS_SIZE_MB" \
          EXTRA_IMAGE_NAME="$EXTRA_IMAGE_NAME" \
-         # > "$log" 2>&1; then  #不产生具体构建什么的日志
-		 2>&1 | tee "$log"; then  #产生具体的构建什么的日志
+         #> "$log" 2>&1; then  #静默，不产生详细的构建日志
+		 2>&1 | tee "$log"; then  #产生详细的构建日志
       log_ok "构建成功"
       break
     fi
