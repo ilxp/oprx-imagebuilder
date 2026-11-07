@@ -55,7 +55,7 @@ kmod-i40e
 kmod-iavf
 kmod-ixgbe
 kmod-ixgbevf
-kmod-r8169
+kmod-r8168
 kmod-tg3
 kmod-bnx2
 kmod-bnx2x
