@@ -12,10 +12,6 @@
 #
 # 启用某个包：删掉对应行开头的 #
 # ==============================================================================
-# ---- Autocore &SFE (系统信息监控) ----
-#ilxp/oprx-imagebuilder|autocore-*.apk
-#https://github.com/ilxp/oprx-imagebuilder/releases/download/apks/autocore-x86-1.0.1-r1.apk
-
 # ---- Honk  ----  
 QiuSimons/luci-app-honk|honk-*-${ARCH_PACKAGES}-openwrt-*.apk
 QiuSimons/luci-app-honk|luci-app-honk-*.apk
@@ -98,6 +94,6 @@ ilxp/onup-openwrt|ONUP-${ARCH_PACKAGES}-openwrt-*.tar.gz
 #https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/UnblockNeteaseMusic-Go-0.2.13-r1.apk
 #https://down.dllkids.xyz/openwrt-feed/25.12/x86_64/luci-app-unblockneteasemusic-27.179.38486~d85a080.apk
 
-# ---- Podman 及其语言包 ----
-Zerogiven-OpenWRT-Packages/luci-app-podman|luci-app-podman-*.apk
-Zerogiven-OpenWRT-Packages/luci-app-podman|luci-i18n-podman-zh-cn-*.apk
+# ---- Podman 及其语言包 ----  运行错误
+#Zerogiven-OpenWRT-Packages/luci-app-podman|luci-app-podman-*.apk
+#Zerogiven-OpenWRT-Packages/luci-app-podman|luci-i18n-podman-zh-cn-*.apk
