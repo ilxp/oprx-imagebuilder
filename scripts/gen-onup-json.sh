@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# gen-onup-json.sh —— 生成 onup 在线升级用的 oR.json
+# gen-onup-json.sh —— 生成 onup 在线升级用的 *.json
 #
 # 用法:
 #   gen-onup-json.sh \
 #     --fw-file    /path/to/OprX-xxx.img.gz \
-#     --out        /path/to/oR.json \
+#     --out        /path/to/<FLAG>.json \
 #     --profile    x86_64 \
 #     --re-url     "https://github.com/user/repo/releases/download/firmware" \
 #     --build-date 2026110214 \
 #     [--logs      /path/to/CHANGELOG.md]
+# 注：--out 的文件名由调用方（build.sh）决定，通常为 ${FW_TAG}.json（如 oR.json / oP.json）
 #
 # 输出（若 --out 已存在且含其他 profile，会合并）:
 #   {
@@ -87,5 +88,5 @@ with open(out_path, "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
     f.write("\n")
 
-print(f"  oR.json: {out_path}  ({len(data)} 个 profile: {', '.join(sorted(data))})")
+print(f"  {os.path.basename(out_path)}: {out_path}  ({len(data)} 个 profile: {', '.join(sorted(data))})")
 PYEOF

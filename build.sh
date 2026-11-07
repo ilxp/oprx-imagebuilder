@@ -896,9 +896,12 @@ collect_artifacts() {
 	# 把 variant 里的 efi 替换成 uefi（仅影响文件名）
     local name_variant="${variant//efi/uefi}"
 
-    # 固件名：${BRAND}-openwrt-${FW_TAG}${VERSION}-${BUILD_DATE}-${ARCH}-${NAME_VARIANT}.img.gz
-    # 示例：OprX-openwrt-oR25.12.6-2026110214-x86_64-squashfs-combined-uefi.img.gz
-    out="${brand}-openwrt-${fw_tag}${VERSION}-${build_date}-${ARCH}-${name_variant}.img.gz"
+    # 固件名：${BRAND}-${IB_DISTRO}-${FW_TAG}${VERSION}-${BUILD_DATE}-${ARCH}-${NAME_VARIANT}.img.gz
+	# 示例（IB_DISTRO="openwrt", FW_TAG="oR", VERSION="25.12.6"）：
+	#   OprX-openwrt-oR25.12.6-2026110214-x86_64-squashfs-combined-uefi.img.gz
+	# 示例（IB_DISTRO="immortalwrt", FW_TAG="oR", VERSION="25.12.2"）：
+	#   OprX-immortalwrt-oR25.12.2-2026110214-x86_64-squashfs-combined-uefi.img.gz
+    out="${brand}-${IB_DISTRO}-${fw_tag}${VERSION}-${build_date}-${ARCH}-${name_variant}.img.gz"
 
     cp -f "$img" "$OUTPUT_DIR/$out"
     ( cd "$OUTPUT_DIR" && sha256sum "$out" > "$out.sha256" )
@@ -950,8 +953,8 @@ collect_artifacts() {
     log_info "GENERATE_VMDK=false，不生成 VMDK"
   fi
 
-  # ---- 生成 oR.json（引用第一个变体）----
-  log_info "生成 oR.json..."
+  # ---- 生成 onup 在线升级 JSON（文件名跟随 FW_TAG）----
+  log_info "生成 ${fw_tag}.json..."
   local gen_script="$ROOT/scripts/gen-onup-json.sh"
   if [[ ! -f "$gen_script" ]]; then
     log_error "找不到 $gen_script —— 请先创建这个脚本"
@@ -967,7 +970,7 @@ collect_artifacts() {
 
   if ! bash "$gen_script" \
     --fw-file    "$OUTPUT_DIR/$first_out" \
-    --out        "$OUTPUT_DIR/oR.json" \
+    --out        "$OUTPUT_DIR/${fw_tag}.json" \
     --profile    "$ARCH_PACKAGES" \
     --re-url     "$re_url" \
     --build-date "$build_date" \
@@ -975,7 +978,7 @@ collect_artifacts() {
     log_error "gen-onup-json.sh 执行失败"
     exit 1
   fi
-  log_ok "oR.json 已生成: $OUTPUT_DIR/oR.json"
+  log_ok "${fw_tag}.json 已生成: $OUTPUT_DIR/${fw_tag}.json"
 
   # 输出实际构建的版本号（如 25.12.6）和标签（如oR），供 CI 的 Release 步骤读取并作为 Tag
   echo "${VERSION}" > "$OUTPUT_DIR/version.txt"

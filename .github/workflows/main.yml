@@ -146,3 +146,18 @@ jobs:
               --title "$TITLE" \
               --notes-file /tmp/notes.md
           fi
+          
+      - name: 清理旧资产
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.realver.outputs.version }}
+        run: |
+          # 删除当前 tag 下与"新产物名"不匹配的 .img.gz
+          gh release view "$TAG" --json assets -q '.assets[].name' | while read -r a; do
+            [[ "$a" == *.img.gz ]] || continue
+            if ! ls output/*/"$a" >/dev/null 2>&1; then
+              echo "删除旧资产: $a"
+              gh release delete-asset "$TAG" "$a" --yes
+            fi
+          done
