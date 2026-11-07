@@ -1,12 +1,13 @@
 # ==============================================================================
 # 所有 target 通用预装
 #
-# ⚠️ snapshot 兼容：以下包在 OpenWrt/ImmortalWrt snapshots 源里**已不存在**，
-#    已从本列表移除，否则每次 snapshots 构建都会触发自愈剔除并占一轮时间。
-#      - kmod-crypto-misc     —— 上游已移除（OpenWrt commit 2026-01）
-#      - kmod-nf-conntrack6   —— 已合并进 kmod-nf-conntrack
-#      - kmod-fb / kmod-fb-*  —— x86 专用，见 x86_64.conf 说明；且 snapshots 不稳定
-#    releases 稳定版里都还在，如果只用 releases，可自行恢复（但推荐统一不带，两边都跑得通）。
+# ⚠️ 以下包在官方源 / snapshots 里没有，已注释：
+#   luci-app-diskman       第三方源才有（lisaac/luci-app-diskman）
+#   luci-app-cpufreq       snapshots 源可能没有
+#   luci-app-usb-printer   snapshots 源可能没有
+#   luci-app-zerotier      snapshots 源可能没有
+#   stuntman-client        snapshots 源可能没有
+#   如果 releases 构建需要，取消注释即可。
 # ==============================================================================
 
 # ---- LuCI 核心 ----
@@ -24,12 +25,12 @@ luci-app-ddns
 luci-app-upnp
 luci-app-ttyd
 luci-app-samba4
-luci-app-zerotier
-luci-app-diskman          # 磁盘管理：格式化 / 分区 / 挂载
-luci-app-cpufreq          # CPU 频率调节（配合 x86_64.conf 的 CPU_GOVERNOR）
-luci-app-commands         # 自定义命令执行窗口
-luci-app-usb-printer      # USB 打印机共享
-luci-app-wol              # 网络唤醒
+#luci-app-zerotier
+luci-app-commands
+luci-app-wol
+#luci-app-cpufreq
+#luci-app-usb-printer
+#luci-app-diskman
 
 # ---- 主题 ----
 luci-theme-bootstrap
@@ -53,11 +54,11 @@ bind-host
 libopenssl-conf
 libopenssl-devcrypto
 libopenssl-legacy
-libcurl4                  # ★ 修正：原 libcurl 是 menuconfig 虚拟项，apk 装不上
+libcurl4
 ca-bundle
-openssl-util              # openssl 命令行（调试用）
+openssl-util
 
-# ---- SSH（dropbear 主用，仅保留 sftp-server） ----
+# ---- SSH ----
 dropbear
 openssh-sftp-server
 
@@ -87,7 +88,7 @@ kmod-veth
 kmod-bonding
 kmod-br-netfilter
 kmod-ipvlan
-kmod-ifb
+#kmod-ifb
 
 # ---- 内核：IPSec / IPv6 ----
 kmod-ipsec4
@@ -105,7 +106,7 @@ kmod-tcp-bbr
 kmod-tls
 kmod-inet-diag
 
-# ---- 内核：中文编码（挂 U 盘/共享） ----
+# ---- 内核：中文编码 ----
 kmod-nls-cp936
 kmod-nls-cp950
 
@@ -173,7 +174,7 @@ kmod-crypto-xcbc
 kmod-crypto-xts
 kmod-crypto-xxhash
 
-# ---- zram 内存压缩 ----
+# ---- zram ----
 zram-swap
 kmod-lib-lz4
 kmod-lib-lzo
@@ -188,7 +189,7 @@ htop
 coremark
 acpid
 qemu-ga
-stuntman-client
+#stuntman-client
 usbmuxd
 qrencode
 iperf3
@@ -238,7 +239,6 @@ ddns-scripts-services
 
 # ---- 其他官方 ----
 podman
-zerotier
 
 # 强制排除 argon-config
 -luci-app-argon-config

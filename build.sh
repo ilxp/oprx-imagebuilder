@@ -495,29 +495,20 @@ collect_packages() {
   fi
 
   # ④ 【关键】严格过滤包名
-  #
-  #    合法包名 = 字母数字开头，只含 [a-zA-Z0-9._+-]，可带 `-` 前导（排除标记），
-  #    可带 `=version` 后缀（版本 pin）。
-  #
-  #    过滤过程：
-  #      1. 把空格/制表/换行都转成换行（每行一个候选）
-  #      2. grep 只保留合法包名
-  #      3. sort -u 去重
-  #      4. 转回空格分隔
-  #
-  #    这会自动过滤掉：
-  #      - `#`（注释符号本身）
-  #      - `----`（多个连字符开头，不是合法包名）
-  #      - `网卡（有线）`（非 ASCII）
-  #      - `PVE`（只是大写字母，但会被保留 —— 实际上 PVE 是包名吗？NO！）
-  #
-  #    等等，`PVE` 是大写字母，符合 `^[a-zA-Z0-9]` 但...它确实是中文注释里的词。
-  #    问题：`PVE` 恰好符合包名格式，无法通过正则排除！
-  #
-  #    所以光过滤不够，必须同时把 PACKAGES_ARCH_EXTRA 里的中文注释删掉。
+   # ---- 严格过滤包名 ----
+  # 规则：
+  #   1. 去掉 # 开头的 token（双引号变量里的注释）
+  #   2. 去掉纯数字 + 点（1. 2. 3. 来自 "1. 存储驱动" 这类注释）
+  #   3. 去掉文件名（.conf .list .md .txt .json .yml .yaml）
+  #   4. 去掉 menuconfig 虚拟项（menuconfig / openssl）
+  #   5. 包名必须以字母开头，只含 [a-z0-9._+-]，可带 - 前导和 =version 后缀
   PACKAGES=$(echo "$pkgs" \
     | tr ' \t\n' '\n\n\n' \
-    | grep -E '^-?[a-z0-9][a-z0-9._+-]*(=[a-zA-Z0-9._+~-]+)?$' \
+    | grep -vE '^[[:space:]]*#' \
+    | grep -vE '^[0-9]+\.$' \
+    | grep -vE '\.(conf|list|md|txt|json|yml|yaml)$' \
+    | grep -vE '^(menuconfig|openssl|subconverter|libcurl)$' \
+    | grep -E '^-?[a-z][a-z0-9._+-]*(=[a-zA-Z0-9._+~-]+)?$' \
     | sort -u \
     | tr '\n' ' ' \
     | xargs)
