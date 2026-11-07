@@ -47,7 +47,7 @@ ib_short_date() {
 #
 # 自动推导：
 #   "" / "SNAPSHOT" / "snapshot"          → snapshots
-#   "25.12-SNAPSHOT" / "25.12-snapshot"   → releases/25.12-SNAPSHOT
+#   "25.12-SNAPSHOT" / "25.12-snapshot"   → releases/25.12-SNAPSHOT  #仅immortalwrt
 #   "25.12.6"                             → releases/25.12.6
 #
 # 用 tr 而非 ${v,,}：兼容 macOS 自带 bash 3.2
@@ -223,6 +223,14 @@ load_config() {
     log_info "开发快照，VERSION 自动设为短日期: $VERSION"
   fi
 
+  # ---- 兜底检查：VERSION 为空说明三级链全空，配置有误 ----
+  if [[ -z "${VERSION:-}" ]]; then
+    log_error "版本号为空：VERSION_OVERRIDE / VERSION / DEFAULT_VERSION 三级都为空"
+    log_error "  请在 build.conf 里设置 VERSION 或 DEFAULT_VERSION，"
+    log_error "  或在 workflow 传 version input（如 openwrt/25.12.6）"
+    exit 1
+  fi
+  
   log_info "发行版: $IB_DISTRO"
   [[ -n "${IB_CHANNEL:-}" ]] && log_info "渠道: $IB_CHANNEL (显式)"
   log_info "渠道路径: $(ib_release_path)"
@@ -969,8 +977,9 @@ collect_artifacts() {
   fi
   log_ok "oR.json 已生成: $OUTPUT_DIR/oR.json"
 
-  # 输出实际构建的版本号（如 25.12.6），供 CI 的 Release 步骤读取并作为 Tag
+  # 输出实际构建的版本号（如 25.12.6）和标签（如oR），供 CI 的 Release 步骤读取并作为 Tag
   echo "${VERSION}" > "$OUTPUT_DIR/version.txt"
+  echo "${FLAG:-oR}" > "$OUTPUT_DIR/flag.txt"
 
   ( cd "$OUTPUT_DIR" && ls -lh )
   log_ok "完成，产物在: $OUTPUT_DIR"

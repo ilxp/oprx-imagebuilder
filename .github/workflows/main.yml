@@ -66,18 +66,21 @@ jobs:
           chmod +x build.sh
           ./build.sh
 
-      - name: 读取实际构建版本号
+          
+      - name: 读取实际构建版本号和标签
         id: realver
         run: |
           VER=$(cat output/*/version.txt | head -n 1)
+          FLAG=$(cat output/*/flag.txt 2>/dev/null | head -n 1 || echo "oR")
           echo "version=$VER" >> $GITHUB_OUTPUT
-          echo "✓ 本次实际构建版本: $VER"
+          echo "flag=$FLAG" >> $GITHUB_OUTPUT
+          echo "✓ 本次实际构建版本: $VER，标签: $FLAG"
           
       - name: 上传 Artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: OprX-${{ matrix.name }}-${{ steps.realver.outputs.version }}-${{ github.run_number }}
+          name: OprX-${{ matrix.name }}-${{ steps.realver.outputs.flag }}${{ steps.realver.outputs.version }}-${{ github.run_number }}
           path: output/
           retention-days: 7
           if-no-files-found: error
@@ -90,13 +93,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VER: ${{ steps.realver.outputs.version }}
+          FLAG: ${{ steps.realver.outputs.flag }}
           NAME: ${{ matrix.name }}
         run: |
           set -euo pipefail
 
-          # Tag 格式：v25.12.6
-          TAG="v${VER}"
-          TITLE="OprX ${NAME} - OpenWrt ${VER}"
+          # Tag 格式：v${FLAG}${VER}，如 v25.12.6 或者oR25.12.6
+          #TAG="v${VER}"
+          TAG="${FLAG}${VER}"
+          TITLE="OprX ${NAME} - ${FLAG}${VER}"
 
           shopt -s nullglob
           ASSETS=(
