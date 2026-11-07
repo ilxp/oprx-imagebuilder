@@ -728,7 +728,8 @@ make_image_with_self_heal() {
          FILES="$overlay" \
          ROOTFS_PARTSIZE="$ROOTFS_SIZE_MB" \
          EXTRA_IMAGE_NAME="$EXTRA_IMAGE_NAME" \
-         > "$log" 2>&1; then
+         # > "$log" 2>&1; then  #不产生具体构建什么的日志
+		 2>&1 | tee "$log"; then  #产生具体的构建什么的日志
       log_ok "构建成功"
       break
     fi
