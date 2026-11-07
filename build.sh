@@ -382,8 +382,11 @@ prepare_repos() {
   local overlay_key_dir="$ROOT/files/etc/apk/keys"
   mkdir -p "$overlay_repo_dir" "$overlay_key_dir"
 
-  # ---- IB 自带 repositories 的 releases/<短日期> → snapshots ----
-  if [[ -f "$IB_DIR/repositories" && "$(ib_release_path)" == "snapshots" ]]; then
+  local release_path
+  release_path="$(ib_release_path)"    # snapshots 或 releases/x.y.z
+
+  # ---- ① 修正 IB 自带 repositories 里残留的 releases/<短日期> ----
+  if [[ -f "$IB_DIR/repositories" && "$release_path" == "snapshots" ]]; then
     if grep -qE '/releases/[0-9]+\.[0-9]+\.[0-9]+/' "$IB_DIR/repositories"; then
       sed -i -E 's|/releases/[0-9]+\.[0-9]+\.[0-9]+/|/snapshots/|g' "$IB_DIR/repositories"
       log_info "已修正 IB 自带 repositories：releases/<短日期> → snapshots"
@@ -395,19 +398,11 @@ prepare_repos() {
   log_info "ImageBuilder 内置 ${orig_count} 个官方仓库（保留）"
 
   local count=0
-  local release_path
-  release_path="$(ib_release_path)"
-
   while IFS='|' read -r name url key_url enabled; do
     [[ -z "$name" || "$name" == \#* ]] && continue
     [[ "$enabled" == "true" ]] || continue
 
-    if [[ "$url" == *"downloads.openwrt.org"* ]]; then
-      log_info "跳过 ${name}（官方源已内置）"
-      continue
-    fi
-
-    # ---- 占位符展开 ----
+    # ---- ② 展开顺序：__DISTRO__ → __RELEASE_PATH__ → __VERSION__ → 其余 ----
     url="${url//__DISTRO__/$IB_DISTRO}"
     url="${url//__RELEASE_PATH__/$release_path}"
     url="${url//__VERSION__/$VERSION}"
@@ -416,6 +411,21 @@ prepare_repos() {
     url="${url//__SUBTARGET__/$SUBTARGET}"
     url="${url//__SERIES__/${VERSION%.*}}"
 
+    # ---- ③ 防御：snapshots 下强制改写 releases/<x.y.z> → snapshots ----
+    if [[ "$release_path" == "snapshots" ]]; then
+      url=$(printf '%s' "$url" | sed -E 's|/releases/[0-9]+\.[0-9]+\.[0-9]+/|/snapshots/|g')
+    fi
+
+    # ---- ④ 官方源：name 以 official 开头 → 只写 overlay，不追加 IB repositories ----
+    # 你的 REPOS 有 official-base / official-luci / ... / official-target，
+    # 用前缀匹配才能全命中
+    if [[ "$name" == official* ]]; then
+      log_info "跳过 ${name} 的 IB repositories 追加（官方源已内置）"
+      echo "$url" > "${overlay_repo_dir}/${name}.list"
+      continue
+    fi
+
+    # ---- 第三方源：追加 + 写 overlay + 下密钥 ----
     echo "$url" >> "$IB_DIR/repositories"
     echo "$url" > "${overlay_repo_dir}/${name}.list"
 
