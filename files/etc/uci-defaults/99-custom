@@ -200,6 +200,27 @@ if [ "__ENABLE_BBR__" = "true" ]; then
   sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
 fi
 
+# --- Intel CPU 调度优化 (intel_pstate) ---
+PSTATE_STATUS_FILE="/sys/devices/system/cpu/intel_pstate/status"
+if [ -f "$PSTATE_STATUS_FILE" ]; then
+    # 1. 强制设为 active 模式 (硬件自主变频，响应更快)
+    if [ "$(cat "$PSTATE_STATUS_FILE")" = "passive" ]; then
+        echo "active" > "$PSTATE_STATUS_FILE" 2>/dev/null || true
+    fi
+
+    # 2. 设置调频策略为 powersave
+    for cpu_gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        [ -f "$cpu_gov" ] && echo "powersave" > "$cpu_gov" 2>/dev/null || true
+    done
+
+    # 3. 设置能效偏好为 balance_performance (平衡偏向性能)
+    for cpu_epp in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
+        [ -f "$cpu_epp" ] && echo "balance_performance" > "$cpu_epp" 2>/dev/null || true
+    done
+
+    echo "✓ Intel CPU 调度优化已应用"
+fi
+
 # ============================================================================
 # 8. 换源（NJU 镜像）
 # ============================================================================
